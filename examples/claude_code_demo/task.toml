@@ -1,0 +1,25 @@
+# T38 demo: Claude Code (an external agent CLI) is the worker, GLM reviews. The same task as examples/codex_demo.
+# Run from the repo root:
+#   m2k --config <your copy of examples/claude_code_demo/m2k.claude.toml> run examples/claude_code_demo/task.toml
+
+[task]
+id = "claude-demo-1"     # bump for a rerun (claude-demo-2, ...)
+goal = """Create wordstats.py (Python 3.11+, standard library only):
+- top_words(text, n) -> list of (word, count): words are lower-cased runs of letters, digits and apostrophes;
+  the n most common, highest count first, ties sorted alphabetically; n < 1 raises ValueError.
+- Run as `python wordstats.py FILE N`: prints the top N words of the UTF-8 file, one "word count" per line.
+Do not modify check.py."""
+workspace = "ws/{task_id}"
+seed = "../codex_demo/seed"   # the same owner check as the Codex demo
+protected = ["check.py"]
+deliver_to = "out"
+constraints = ["Python standard library only.", "Do not modify check.py."]
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]   # an external agent needs every tool (T37)
+
+[acceptance]
+files = ["check.py"]
+command = "{python} check.py"
+timeout_s = 60
+
+[budget]
+max_tokens = 2000000     # checked against the tokens Claude Code reports (--output-format json)

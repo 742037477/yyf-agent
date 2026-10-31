@@ -1,0 +1,80 @@
+name: ci
+
+# One Python 3.13 test job: Linux on PRs, Windows on code pushes to main (owner decision 2026-10-19, Actions minutes).
+# Check Python 3.11 syntax in the same job to retain the minimum-version promise cheaply.
+on:
+  push:
+    branches: [main]
+    paths: ["m2k/**", "tests/**", "tools/**", "pyproject.toml"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'windows-latest' }}
+            python: "3.13"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        id: python311
+        with:
+          python-version: "3.11"
+      - name: check Python 3.11 syntax
+        shell: bash
+        run: '"${{ steps.python311.outputs.python-path }}" -m compileall -q m2k tests tools'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: install the only dependency (cryptography, for Ed25519)
+        run: python -m pip install --quiet cryptography
+      - name: install bubblewrap (Linux isolation backend for commands)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q bubblewrap
+          probe='from m2k.sandbox import Bwrap; ok, why = Bwrap().available(); print("bwrap:", ok, why); raise SystemExit(0 if ok else 1)'
+          if ! python -c "$probe"; then
+            echo "unprivileged user namespaces are blocked (AppArmor); relaxing for this job only"
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            python -c "$probe"
+          fi
+      - name: unit tests
+        shell: bash
+        run: python -m unittest discover -s tests -t . -v 2>&1 | tee test-output.txt; exit ${PIPESTATUS[0]}
+      - name: offline acceptance scenarios
+        shell: bash
+        run: python -m m2k accept --offline 2>&1 | tee accept-output.txt; exit ${PIPESTATUS[0]}
+      - name: report failures as annotations
+        if: failure()
+        shell: bash
+        run: |
+          [ -f test-output.txt ] && python tools/ci_annotate.py test-output.txt
+          [ -f accept-output.txt ] && python tools/ci_annotate.py accept-output.txt
+          true
+
+  # Deterministic scope gate for task PRs: only the card's files, within its line budget.
+  card-scope:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: check PR stays inside its task card
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+        run: python tools/card_check.py --base "origin/$BASE_REF" --title "$PR_TITLE"

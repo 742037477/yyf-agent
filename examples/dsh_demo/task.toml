@@ -1,0 +1,25 @@
+# T41 demo: DeepSeek Harness is the worker, GLM reviews. Same task and owner check as the Codex demo.
+# Run from the repo root:
+#   m2k --config <your copy of examples/dsh_demo/m2k.dsh.toml> run examples/dsh_demo/task.toml
+
+[task]
+id = "dsh-demo-1"     # bump for a rerun (dsh-demo-2, ...)
+goal = """Create wordstats.py (Python 3.11+, standard library only):
+- top_words(text, n) -> list of (word, count): words are lower-cased runs of letters, digits and apostrophes;
+  the n most common, highest count first, ties sorted alphabetically; n < 1 raises ValueError.
+- Run as `python wordstats.py FILE N`: prints the top N words of the UTF-8 file, one "word count" per line.
+Do not modify check.py."""
+workspace = "ws/{task_id}"
+seed = "../codex_demo/seed"
+protected = ["check.py"]
+deliver_to = "out"
+constraints = ["Python standard library only.", "Do not modify check.py."]
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]
+
+[acceptance]
+files = ["check.py"]
+command = "{python} check.py"
+timeout_s = 60
+
+[budget]
+max_tokens = 2000000     # dsh supplies no usage: this remains unknown, not an enforced token bound

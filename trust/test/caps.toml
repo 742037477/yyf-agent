@@ -1,0 +1,6 @@
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]
+max_rounds = 40
+max_model_calls = 44
+max_tokens = 3000000
+max_commands = 20
+network = false

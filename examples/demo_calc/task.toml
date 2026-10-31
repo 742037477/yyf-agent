@@ -1,0 +1,25 @@
+# A first real-model task. Run from the repo root:
+#   m2k run examples/demo_calc/task.toml
+# The workspace starts with seed/check.py (the protected acceptance test). The worker must write calc.py.
+
+[task]
+id = "calc-001"          # must be unique per run; bump it (calc-002, ...) to rerun
+goal = """Create calc.py with four functions: add(a, b), sub(a, b), mul(a, b) and div(a, b).
+div must raise ValueError("division by zero") when b == 0. Do not modify check.py."""
+workspace = "ws/{task_id}"   # a fresh folder per run
+seed = "seed"                # starter files copied in: check.py
+protected = ["check.py"]     # the worker may not change the acceptance test
+deliver_to = "out"
+constraints = ["Python standard library only.", "Do not modify check.py."]
+tools = ["list_files", "read_file", "write_file", "run_command"]
+
+[acceptance]
+files = ["check.py"]
+command = "{python} check.py"
+timeout_s = 60
+
+[budget]
+max_rounds = 12
+max_model_calls = 15
+max_tokens = 200000
+max_commands = 8

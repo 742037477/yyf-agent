@@ -1,0 +1,31 @@
+# T38: Claude Code as the worker on Windows (your Claude login), GLM-5.3 as the independent reviewer.
+# Copy this file outside the repo before you fill it in, and use the same [trust] block as for the Codex demo.
+# `claude` must be on PATH where m2k runs; `m2k run` starts it once with a trivial prompt first and refuses to start
+# if that fails (`m2k ping` runs the same check on its own).
+
+[sandbox]
+backend = "none"   # Windows has no bubblewrap; recorded in the ledger
+
+[models.worker]
+kind = "cli"
+name = "claude-code"
+# -p: non-interactive, prompt on stdin; json: a result object with token usage. acceptEdits: Claude Code may edit
+# files in the task folder without asking. Claude Code has no sandbox of its own on Windows, so its shell and web
+# tools are switched off: it writes code, and M2 runs the owner's acceptance.
+command = ["claude", "-p", "--output-format", "json", "--permission-mode", "acceptEdits",
+           "--disallowedTools", "Bash,PowerShell,WebFetch,WebSearch"]
+env = ["PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "USERPROFILE", "HOMEDRIVE",
+       "HOMEPATH", "HOME", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "CLAUDE_CONFIG_DIR"]
+timeout_s = 1800
+usage = "claude-json"
+isolation = "Claude Code acceptEdits, shell and web tools off (declared by the vendor, not verified by M2)"
+
+[models.reviewer]
+kind = "openai_compat"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+model = "glm-5.3"
+api_key_file = "C:/path/to/your/glm-key.txt"    # your GLM key FILE (not its folder; mind hidden .txt); never commit it
+max_tokens = 32768
+timeout_s = 600
+extra_body = { reasoning_effort = "max" }
+retry_delays = [60, 240]

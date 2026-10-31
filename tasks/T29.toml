@@ -1,0 +1,58 @@
+# m2k task contract for card T29: stage 3 end to end on GitHub (m2k-task). DeepSeek (大肥鱼) plans and works,
+# GLM-5.3 reviews every subtask and the whole. The owner gives the goal, the checks and the budget; the model splits.
+[task]
+id = "T29-run-4"            # bump for a rerun
+plan = "model"
+goal = """Build a small expense-report tool in examples/expenses/ (Python 3.11+, standard library only):
+
+1. examples/expenses/records.py
+   - Expense: a frozen dataclass with date (datetime.date), category (str), amount (decimal.Decimal), note (str).
+   - load(path) -> list[Expense]: reads a UTF-8 CSV whose header is exactly date,category,amount,note.
+     date is YYYY-MM-DD; category is stripped and lower-cased and must not be empty; amount is a decimal > 0 with at
+     most two decimal places; note may be empty (quoted notes may contain commas).
+     Any bad row, or a wrong header, raises ValueError whose message contains "line N" (N = the 1-based line in the
+     file; the header is line 1). A file with only the header gives [].
+2. examples/expenses/summary.py
+   - by_category(items) and by_month(items) -> dict[str, Decimal], keys sorted (months as "YYYY-MM");
+     total(items) -> Decimal (Decimal("0") when empty). items are any objects with date, category and amount.
+3. examples/expenses/cli.py, run as `python examples/expenses/cli.py FILE`, prints:
+     By category:
+       <category>: <amount with 2 decimals>     (one line each, sorted)
+     By month:
+       <YYYY-MM>: <amount with 2 decimals>
+     Total: <amount with 2 decimals>
+   On a ValueError from load it prints "error: <message>" to stderr, nothing to stdout, and exits 1. With no
+   argument it prints a usage line to stderr and exits 2. It imports records and summary as sibling modules.
+
+The owner checks in tasks/T29/ (check_records.py, check_summary.py, check_cli.py; check_all.py runs all three) define
+the exact expected behaviour: read the one for your part first, write your file, run that check with run_command, and
+fix until it passes. Then call finish. You see only your last 12 rounds, so write soon after reading."""
+workspace = ".."
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]
+constraints = [
+  "Write only files under examples/expenses/. Never change the owner checks in tasks/T29/ or any other file.",
+  "Standard library only; must work on Windows and Linux.",
+  "Planner: every subtask needs room to read, write and test: about 11 rounds, 12 model calls, 5 commands and 900000 tokens each, and max_reassign 1.",
+]
+protected = [
+  "AGENTS.md", "README.md", "docs/ARCHITECTURE.md", "docs/WORKFLOW.md", "tasks/T29-stage3-e2e.md", "tasks/T29.toml",
+  "m2k/trust.py", "m2k/kernel.py", "m2k/gates.py", "m2k/worker.py", "m2k/ledger.py", "m2k/verify.py", "m2k/tools.py",
+  "m2k/contract.py", "m2k/models.py", "m2k/cli.py", "m2k/sandbox.py", "m2k/types.py", "m2k/accept.py",
+]
+
+[acceptance]
+files = ["tasks/T29/_common.py", "tasks/T29/check_records.py", "tasks/T29/check_summary.py", "tasks/T29/check_cli.py",
+         "tasks/T29/check_all.py"]
+command = "{python} tasks/T29/check_all.py"
+timeout_s = 300
+
+[acceptance.parts]
+"tasks/T29/check_records.py" = "{python} tasks/T29/check_records.py"
+"tasks/T29/check_summary.py" = "{python} tasks/T29/check_summary.py"
+"tasks/T29/check_cli.py" = "{python} tasks/T29/check_cli.py"
+
+[budget]                    # the charter caps in trust/test/caps.toml
+max_rounds = 40
+max_model_calls = 44
+max_tokens = 3000000
+max_commands = 20

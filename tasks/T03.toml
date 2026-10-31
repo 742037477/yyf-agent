@@ -1,0 +1,32 @@
+# m2k task contract for card T03, executed by DeepSeek (worker) and reviewed by GLM-5.3.
+# Run from the repo root on branch task/T03-tools-tests:   python -m m2k run tasks/T03.toml
+[task]
+id = "T03-run-3"            # bump to T03-run-2 ... for a rerun
+goal = """You are working inside the m2-kernel repository (a Python governance kernel).
+Read tasks/T03-tools-tests.md and m2k/tools.py, then create tests/test_tools.py exactly as the card
+requires: at least 8 unittest tests for Workspace.resolve, list_files, read_file, write_file and
+run_command (including the TIMEOUT -> UNKNOWN case). Use temporary directories only.
+Look at tests/test_gates.py for the project's test style. Change no other file.
+This is a rerun: the card's "Review notes" list three points earlier attempts got wrong. Satisfy all of them."""
+workspace = ".."
+tools = ["list_files", "read_file", "write_file", "run_command"]
+constraints = [
+  "Only create tests/test_tools.py. Do not modify any existing file.",
+  "Standard library unittest only; tests must pass on Windows and Linux.",
+  "Use {python} -c \"...\" inside test commands; keep sleep/timeouts at or under 2 seconds.",
+]
+protected = [
+  "AGENTS.md", "m2k/tools.py", "m2k/gates.py", "m2k/kernel.py", "m2k/worker.py", "m2k/verify.py",
+  "m2k/ledger.py", "m2k/contract.py", "m2k/models.py", "tests/helpers.py", "tests/test_gates.py",
+  "tests/test_pipeline.py", "tests/test_ledger.py", "tasks/T03-tools-tests.md",
+]
+
+[acceptance]
+command = "{python} -m unittest tests.test_tools -v && {python} -c \"import unittest; n = unittest.defaultTestLoader.loadTestsFromName('tests.test_tools').countTestCases(); print(n, 'tests'); raise SystemExit(0 if n >= 8 else 1)\" && {python} -m unittest discover -s tests -t ."
+timeout_s = 300
+
+[budget]
+max_rounds = 20
+max_model_calls = 24
+max_tokens = 1500000
+max_commands = 10

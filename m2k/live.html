@@ -1,0 +1,1100 @@
+<title>M2 实时流水线</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+/* m2k live: the approved animation, driven by /api/steps (offline page: system fonts only). Layout: a pixel "governance factory floor" — one stage (SVG pipeline) beside an append-only ledger feed; single deliberate dark look. */
+:root {
+  color-scheme: dark;
+  --ink: #0f1328;        /* page ground */
+  --floor: #161b38;      /* stage floor */
+  --grid: #20274d;
+  --node: #222a55;
+  --band: #2d376e;
+  --pipe: #313b78;
+  --fg: #ebe8f5;
+  --muted: #8f94bd;
+  --gold: #f4c04e;       /* the flowing work */
+  --seal: #e0503a;       /* OBS notary seal (vermilion) */
+  --ok: #5cd08a;
+  --bad: #ff5f6d;
+  --unk: #9aa0bf;
+  --f-zh: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --f-px: Consolas, "Courier New", monospace;
+  --f-mono: Consolas, "JetBrains Mono", "Courier New", monospace;
+}
+html, body { background: var(--ink); color: var(--fg); }
+body { font-family: var(--f-zh); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 28px; }
+.top { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: end; justify-content: space-between; max-width: 1560px; margin: 0 auto 16px; }
+h1 { margin: 0; font-weight: 900; font-size: clamp(22px, 3vw, 32px); letter-spacing: .02em; text-wrap: balance; }
+h1 .px { font-family: var(--f-px); font-weight: 700; color: var(--gold); margin-right: .35em; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.group > span { font-family: var(--f-px); font-size: 11px; color: var(--muted); letter-spacing: .06em; margin-right: 2px; }
+button { font: 500 13px var(--f-zh); color: var(--fg); background: var(--node); border: 2px solid var(--band); padding: 6px 10px; cursor: pointer; border-radius: 0; box-shadow: 0 3px 0 var(--grid); }
+button:hover { border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--band); border-color: var(--gold); color: var(--gold); }
+button:disabled { opacity: .4; cursor: default; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; max-width: 1560px; margin: 0 auto; }
+.stage-card { min-width: 0; background: var(--floor); border: 2px solid var(--grid); }
+#stage { display: block; width: 100%; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 14px 12px; border-top: 2px solid var(--grid); font-size: 13px; color: var(--muted); }
+.legend div { display: flex; align-items: center; gap: 6px; }
+.legend b { color: var(--fg); font-weight: 500; }
+.side { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.detail { background: var(--floor); border: 2px solid var(--grid); }
+.detail h2, .detail h3 { margin: 0; padding: 10px 14px; font-size: 15px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.detail h2 { border-bottom: 2px solid var(--grid); }
+.detail h3 { font-size: 13px; padding-bottom: 4px; border-top: 2px solid var(--grid); }
+.detail small { font: 400 11px var(--f-mono); color: var(--muted); text-align: right; }
+.meta { margin: 0; padding: 8px 14px 10px; display: grid; gap: 6px; }
+.meta div { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.meta dd.mono { font: 400 12px var(--f-mono); color: var(--gold); }
+#d-tree { list-style: none; margin: 0; padding: 4px 14px 12px; display: grid; gap: 6px; }
+#d-tree li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; }
+#d-tree li.child { margin-left: 14px; }
+#d-tree .sc { font: 400 11px var(--f-mono); color: var(--muted); display: block; }
+.chip { font: 500 11px var(--f-zh); padding: 1px 6px; border: 2px solid var(--band); color: var(--muted); white-space: nowrap; }
+.chip.run { border-color: var(--gold); color: var(--gold); }
+.chip.ok { border-color: var(--ok); color: var(--ok); }
+.chip.bad, .chip.fail { border-color: var(--bad); color: var(--bad); }
+.log { min-width: 0; background: var(--floor); border: 2px solid var(--grid); display: flex; flex-direction: column; max-height: 520px; }
+.log h2 { margin: 0; padding: 10px 14px; font-size: 15px; border-bottom: 2px solid var(--grid); display: flex; justify-content: space-between; align-items: baseline; }
+.log h2 small { font: 400 11px var(--f-mono); color: var(--muted); }
+#log { list-style: none; margin: 0; padding: 6px 0; overflow-y: auto; flex: 1; min-height: 200px; }
+#log li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 2px 8px; padding: 6px 14px; border-left: 4px solid transparent; font-size: 13px; line-height: 1.45; }
+#log li .seq { font: 600 11px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
+#log li .kind { font: 400 11px var(--f-mono); color: var(--gold); }
+#log li.ok { border-left-color: var(--ok); }
+#log li.bad { border-left-color: var(--bad); }
+#log li.bad .kind { color: var(--bad); }
+#log li .obs { font: 400 11px var(--f-mono); color: var(--seal); }
+#log li .forge { font: 700 11px var(--f-zh); color: var(--bad); }
+.recon-ok { font: 700 11px var(--f-zh); fill: var(--ok); }
+.recon-bad { font: 700 11px var(--f-zh); fill: var(--bad); }
+[hidden] { display: none !important; }
+.lamp[data-state="skip"] .l-box { fill: none; stroke: var(--muted); stroke-dasharray: 3 3; }
+.lamp[data-state="skip"] .l-zh { fill: var(--muted); opacity: .6; }
+select { font: 500 13px var(--f-zh); color: var(--fg); background: var(--node); border: 2px solid var(--band); padding: 5px 6px; max-width: 320px; }
+select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.status { max-width: 1560px; margin: 0 auto 10px; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.status b { color: var(--fg); font-weight: 500; }
+#log li { cursor: pointer; }
+#log li pre { grid-column: 1 / -1; margin: 6px 0 0; padding: 8px; background: var(--ink); color: var(--fg); font: 400 11px var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.note { max-width: 1560px; margin: 14px auto 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+@media (max-width: 960px) { .wrap { grid-template-columns: minmax(0, 1fr); } .log { max-height: 420px; } }
+
+/* stage */
+.n-body { fill: var(--node); stroke: #0b0e20; stroke-width: 2; transition: fill .3s; }
+.n-shadow { fill: #0b0e20; }
+.n-hi { fill: none; stroke: #3d4890; stroke-width: 3; }
+.n-lo { fill: none; stroke: #141936; stroke-width: 3; }
+.n-glow { fill: none; stroke: transparent; stroke-width: 3; }
+.n-band { fill: var(--band); }
+.node[data-state="active"] .n-glow { stroke: var(--gold); animation: glow 1s ease-in-out infinite; }
+.node[data-state="ok"] .n-glow { stroke: var(--ok); opacity: .45; }
+.node[data-state="bad"] .n-glow { stroke: var(--bad); opacity: .8; }
+.l-box { fill: var(--node); stroke: var(--band); stroke-width: 2; }
+.l-no { font: 700 10px var(--f-px); fill: var(--muted); }
+.l-zh { font: 500 11px var(--f-zh); fill: var(--muted); }
+.lamp[data-state="active"] .l-box { stroke: var(--gold); fill: var(--band); }
+.lamp[data-state="ok"] .l-box { fill: var(--ok); stroke: var(--ok); }
+.lamp[data-state="warn"] .l-box { fill: var(--gold); stroke: var(--gold); }
+.lamp[data-state="bad"] .l-box { fill: var(--bad); stroke: var(--bad); }
+.lamp[data-state="ok"] .l-no, .lamp[data-state="warn"] .l-no, .lamp[data-state="bad"] .l-no { fill: var(--ink); }
+.lamp[data-state="ok"] .l-zh, .lamp[data-state="active"] .l-zh { fill: var(--fg); }
+.lamp[data-state="warn"] .l-zh { fill: var(--gold); }
+.lamp[data-state="bad"] .l-zh { fill: var(--bad); }
+.dock-tx { font: 400 10px var(--f-mono); fill: var(--gold); }
+@keyframes glow { 50% { opacity: .25; } }
+.n-no { font: 700 10px var(--f-px); fill: var(--muted); }
+.n-zh { font: 700 15px var(--f-zh); fill: var(--fg); }
+.n-en { font: 400 8.5px var(--f-px); fill: var(--muted); letter-spacing: .03em; }
+.n-lamp { fill: var(--grid); }
+.node[data-state="active"] .n-body { stroke: var(--gold); }
+.node[data-state="active"] .n-lamp { fill: var(--gold); animation: blink .6s steps(2) infinite; }
+.node[data-state="ok"] .n-body { stroke: var(--ok); }
+.node[data-state="ok"] .n-lamp { fill: var(--ok); }
+.node[data-state="bad"] .n-body { stroke: var(--bad); fill: #3a1f33; }
+.node[data-state="bad"] .n-lamp { fill: var(--bad); }
+.pipe { fill: none; stroke: var(--pipe); stroke-width: 8; stroke-linejoin: round; }
+.pipe-in { fill: none; stroke: var(--grid); stroke-width: 2; stroke-dasharray: 4 6; }
+.sub-st { fill: var(--grid); stroke: var(--pipe); stroke-width: 2; }
+.sub-tx { font: 500 12px var(--f-zh); fill: var(--muted); }
+.cap { font: 400 12px var(--f-zh); fill: var(--muted); }
+.cap-px { font: 400 9px var(--f-px); fill: var(--muted); }
+.bub rect { fill: var(--fg); }
+.bub text { font: 500 12px var(--f-zh); fill: var(--ink); }
+.bub.bad rect { fill: var(--bad); }
+.bub.ok rect { fill: var(--ok); }
+.seal-r { fill: var(--seal); }
+.seal-t { font: 900 17px var(--f-zh); fill: var(--fg); }
+.banner rect { fill: var(--ink); stroke-width: 3; }
+.banner .bt { font: 900 30px var(--f-zh); }
+.banner .bs { font: 400 13px var(--f-zh); fill: var(--muted); }
+.tape-bg { fill: var(--ink); stroke: var(--grid); stroke-width: 2; }
+.root-ok { font: 400 11px var(--f-mono); fill: var(--ok); }
+.root-bad { font: 400 11px var(--f-mono); fill: var(--bad); }
+.bob { animation: bob .5s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+@keyframes bob { 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .bob, .node[data-state="active"] .n-lamp { animation: none; } }
+</style>
+
+<header class="top">
+  <div>
+    <h1><span class="px">M2</span>治理流水线</h1>
+    <p class="sub">一个任务从提交到交付要过的每一道关。Agent 只能提议，放不放行由框架和账本说了算。</p>
+  </div>
+  <div class="controls">
+    <div class="group" role="group" aria-label="来源"><span>来源</span>
+      <button id="src-live" data-src="live" aria-pressed="false">实时跟随</button>
+      <button id="src-replay" data-src="replay" aria-pressed="false">回放</button>
+      <button id="src-demo" data-src="demo" aria-pressed="true">演示剧本</button>
+    </div>
+    <div class="group ledger-only" role="group" aria-label="任务" hidden><span>任务</span>
+      <select id="task-pick" aria-label="选择任务"></select>
+      <button id="readjudicate" title="在账本的临时副本上重跑只读裁决器，和 OBS 日志对账">重新裁决</button>
+    </div>
+    <div class="group demo-only" role="group" aria-label="场景"><span>场景</span>
+      <button id="sc-normal" data-sc="normal" aria-pressed="true">正常交付</button>
+      <button id="sc-split" data-sc="split" aria-pressed="false">拆分子任务</button>
+      <button id="sc-cheat" data-sc="cheat" aria-pressed="false">偷改验收文件</button>
+      <button id="sc-root" data-sc="root" aria-pressed="false">整套换 Root</button>
+      <button id="sc-code" data-sc="code" aria-pressed="false">改框架代码</button>
+      <button id="sc-anchor" data-sc="anchor" aria-pressed="false">改锚点历史</button>
+      <button id="sc-forge" data-sc="forge" aria-pressed="false">伪造账本尾巴</button>
+    </div>
+    <div class="group demo-only" role="group" aria-label="信任域"><span>信任域</span>
+      <button id="dom-test" data-dom="TEST_ONLY" aria-pressed="true">测试 TEST_ONLY</button>
+      <button id="dom-prod" data-dom="PRODUCTION" aria-pressed="false">正式 PRODUCTION</button>
+    </div>
+    <div class="group demo-only" role="group" aria-label="接入的 Worker"><span>接入的 WORKER</span>
+      <button id="w-whale" data-w="whale" aria-pressed="true">DeepSeek 鲸鱼</button>
+      <button id="w-crab" data-w="crab" aria-pressed="false">Claude Code 螃蟹</button>
+      <button id="w-dragon" data-w="dragon" aria-pressed="false">Codex 小龙人</button>
+      <button id="w-robot" data-w="robot" aria-pressed="false">其他模型 机器人</button>
+    </div>
+    <div class="group" role="group" aria-label="播放"><span>播放</span>
+      <button id="pause">暂停</button>
+      <button id="restart">重播</button>
+      <button id="sp-05" data-sp="0.5" aria-pressed="false">0.5×</button>
+      <button id="sp-1" data-sp="1" aria-pressed="true">1×</button>
+      <button id="sp-2" data-sp="2" aria-pressed="false">2×</button>
+      <button id="sp-4" data-sp="4" aria-pressed="false">4×</button>
+      <button id="sp-8" data-sp="8" aria-pressed="false">8×</button>
+    </div>
+  </div>
+</header>
+<p class="status" id="status" aria-live="polite"></p>
+
+<main class="wrap">
+  <section class="stage-card">
+    <svg id="stage" viewBox="0 0 1200 820" role="img" aria-label="M2 治理流水线运行动画"></svg>
+    <div class="legend" id="legend"></div>
+  </section>
+  <div class="side">
+    <section class="detail" aria-live="polite">
+      <h2>Worker 详情 <small id="d-agent">—</small></h2>
+      <dl class="meta">
+        <div><dt>接入方式</dt><dd class="mono" id="d-adapter">—</dd></div>
+        <div><dt>当前调用</dt><dd id="d-call">还没开工</dd></div>
+        <div><dt>轮数</dt><dd id="d-round">—</dd></div>
+        <div><dt>用量</dt><dd id="d-tok">—</dd></div>
+        <div><dt>审查</dt><dd id="d-review">—</dd></div>
+      </dl>
+      <h3>任务树 <small id="d-sum">—</small></h3>
+      <ol id="d-tree"></ol>
+    </section>
+    <aside class="log" aria-live="polite">
+      <h2>账本事件 <small>只追加 · 每条带前一条的哈希</small></h2>
+      <ol id="log"></ol>
+    </aside>
+  </div>
+</main>
+<p class="note">实时跟随和回放读的是本机账本（<code>m2k live</code> 只读打开），框架不参与任何判定之外的事，这个页面也一样只看不改。Worker 是哪只动物，由账本里记的 Worker 模型决定：DeepSeek 和 dsh 是鲸鱼，Claude 是螃蟹，GPT 和 Codex 是小龙人，GLM 是狐狸，其他是机器人。外部 Agent（Claude Code、Codex、dsh）在里面做了什么，框架看不见，只显示“工作中”和用时。OBS 的章只表示账本里有它的回执；真正的核对在“只读裁决”，“重新裁决”会在账本的临时副本上再跑一次，运行结束后才改过的账本也能被查出来。“演示剧本”是不读账本的示意动画。</p>
+
+<script>
+(() => {
+const NS = 'http://www.w3.org/2000/svg';
+const svgEl = document.getElementById('stage');
+const logEl = document.getElementById('log');
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, cls, anchor = 'middle') { const t = el('text', { x, y, class: cls, 'text-anchor': anchor }, parent); t.textContent = s; return t; }
+const svg = el('g', { transform: 'translate(0,120)' }, svgEl);   /* the factory floor sits under the startup strip */
+
+/* ---------- original pixel sprites (12 wide) ---------- */
+const SPR = {
+  whale: { pal: { W: '#4a8fe7', B: '#cfe2ff', K: '#0f1328', S: '#8fe3ff', T: '#2f62b8' }, rows: [
+    '....S.S.....', '.....S......', '..WWWWWW....', '.WWWWWWWW..T', 'WWKWWWWWWWTT', 'WWWWWWWWWWT.', 'BBBBBBBWWWTT', '.BBBBBBBW..T', '..BBBBB.....', '............'] },
+  crab: { pal: { R: '#ec6e45', W: '#ffffff', K: '#0f1328', D: '#b84a2c' }, rows: [
+    'RR........RR', 'RRR......RRR', '.RR.W..W.RR.', '..R.K..K.R..', '..RRRRRRRR..', '.RRRRRRRRRR.', 'RRRRDRRDRRRR', '.R.R.RR.R.R.', 'R..R....R..R', '............'] },
+  dragon: { pal: { G: '#57c27a', Y: '#f4c04e', K: '#0f1328', B: '#bff0c8', D: '#2f8a4f' }, rows: [
+    '.Y......Y...', '.YG....GY...', '..GGGGGG....', '..GKGGKG....', '..GGGGGG..D.', '...GBBG..DD.', '..GGBBGGGD..', '..G.BB.G....', '...GG.GG....', '...D...D....'] },
+  fox: { pal: { O: '#f08a2c', W: '#fff4e6', K: '#0f1328' }, rows: [
+    'O........O..', 'OO......OO..', 'OOO....OOO..', 'OOOOOOOOOO..', 'OKOOOOOOKO..', 'OOOWWWWOOO.O', '.OWWKKWWO.OO', '..WWWWWW.OOW', '..OOOOOO.OWW', '..O.OO.O.WW.'] },
+  robot: { pal: { S: '#b9bdd6', D: '#4b5182', L: '#f4c04e' }, rows: [
+    '.....L......', '.....S......', '..SSSSSSS...', '..SDSSSDS...', '..SSSSSSS...', '..SSDDDSS...', '...SSSSS....', '..SSSSSSS...', '..S.S.S.S...', '............'] },
+  doc: { pal: { A: '#ebe8f5', K: '#5d64a0', R: '#e0503a' }, rows: [
+    'AAAAAAA...', 'A.....AA..', 'A.KKK..AA.', 'A.....AAAA', 'A.KKKKK..A', 'A........A', 'A.KKKK...A', 'A.....RR.A', 'A.....RR.A', 'AAAAAAAAAA'] },
+  shield: { pal: { A: '#ebe8f5', G: '#4a8fe7', K: '#ebe8f5' }, rows: [
+    '.AAAAAAAA.', '.AGGGGGGA.', '.AGGGGGKA.', '.AGGGGKGA.', '.AGKGKGGA.', '.AGGKGGGA.', '..AGGGGA..', '...AGGA...', '....AA....', '..........'] },
+  key: { pal: { G: '#f4c04e', D: '#a8782a' }, rows: [
+    '..........', '.GGG......', 'G...G.....', 'G.D.G.....', 'G...GGGGGG', '.GGG...G.G', '.......G.G', '..........', '..........', '..........'] },
+  gear: { pal: { A: '#b9bdd6', K: '#222a55' }, rows: [
+    '....AA....', '.A.AAAA.A.', '..AAAAAA..', '.AAAKKAAA.', 'AAAKKKKAAA', 'AAAKKKKAAA', '.AAAKKAAA.', '..AAAAAA..', '.A.AAAA.A.', '....AA....'] },
+  ice: { pal: { A: '#ebe8f5', B: '#8fe3ff' }, rows: [
+    'AAAAAAAAAA', 'A........A', 'A...B....A', 'A.B.B.B..A', 'A..BBB...A', 'ABBBBBBB.A', 'A..BBB...A', 'A.B.B.B..A', 'A...B....A', 'AAAAAAAAAA'] },
+  list: { pal: { A: '#ebe8f5', G: '#5cd08a', K: '#5d64a0' }, rows: [
+    'AAAAAAAAA.', 'A.......A.', 'A.G.KKK.A.', 'A.......A.', 'A.G.KKK.A.', 'A.......A.', 'A.G.KKK.A.', 'A.......A.', 'AAAAAAAAA.', '..........'] },
+  lens: { pal: { A: '#ebe8f5', G: '#f08a2c' }, rows: [
+    '..AAAA....', '.A....A...', 'A......A..', 'A......A..', 'A......A..', '.A....A...', '..AAAAGG..', '......GGG.', '.......GGG', '........GG'] },
+  scale: { pal: { G: '#f4c04e' }, rows: [
+    '....GG....', 'GGGGGGGGGG', '.G..GG..G.', 'G.G.GG.G.G', 'GGG.GG.GGG', '....GG....', '....GG....', '..GGGGGG..', '..........', '..........'] },
+  book: { pal: { A: '#ebe8f5', K: '#5d64a0' }, rows: [
+    'AAAA..AAAA', 'A..AAAA..A', 'A.KK.A.KKA', 'A....A...A', 'A.KK.A.KKA', 'A....A...A', 'A.KK.A.KKA', 'AAAAAAAAAA', '..........', '..........'] },
+  gatei: { pal: { A: '#ebe8f5', G: '#5cd08a' }, rows: [
+    'AAAAAAAAAA', 'AGGGGGGGGA', 'A.A.A.A.AA', 'A.A.A.A.AA', 'A.A.A.A.AA', 'A.A.A.A.AA', 'A.A.A.A.AA', 'A........A', 'A........A', 'AA......AA'] },
+  anchor: { pal: { A: '#ebe8f5' }, rows: [
+    '....AA....', '...A..A...', '....AA....', '....AA....', 'AAAAAAAAAA', '....AA....', 'A...AA...A', 'AA..AA..AA', '.AAAAAAAA.', '...AAAA...'] },
+  crate: { pal: { C: '#c98a4b', D: '#8a5a2b', Y: '#f4c04e' }, rows: [
+    'DDDDDDDD', 'DCCYYCCD', 'DCCCCCCD', 'DDDDDDDD', 'DCCCCCCD', 'DCCCCCCD', 'DDDDDDDD'] },
+};
+function sprite(name, px = 4, parent) { const g = el('g', {}, parent); const { rows, pal } = SPR[name]; rows.forEach((r, y) => [...r].forEach((c, x) => { if (c !== '.') el('rect', { x: x * px, y: y * px, width: px, height: px, fill: pal[c] }, g); })); return g; }
+
+/* ---------- stations ---------- */
+const N = {
+  contract: { no: '01', zh: '任务提交', en: 'TASK.SUBMITTED', x: 110, y: 175 },
+  cred:     { no: '02', zh: '签发凭证', en: 'CREDENTIAL.ISSUED', x: 340, y: 175 },
+  worker:   { no: '03', zh: 'Worker 工位', en: 'WORKER · GATE', x: 720, y: 175, w: 250, h: 110 },
+  frozen:   { no: '04', zh: '冻结成品', en: 'CANDIDATE.FROZEN', x: 1105, y: 525 },
+  test:     { no: '05', zh: '任务方验收', en: 'TEST.RESULT', x: 935, y: 525 },
+  review:   { no: '06', zh: '跨厂商审查', en: 'AUDIT.RESULT', x: 765, y: 525 },
+  verdict:  { no: '07', zh: '内核判定', en: 'VERDICT', x: 595, y: 525 },
+  adjud:    { no: '08', zh: '只读裁决', en: 'GATE.ADJUDICATION', x: 425, y: 525 },
+  anchor:   { no: '09', zh: '外部锚点', en: 'ANCHOR.CHECKPOINT', x: 255, y: 525 },
+  gate:     { no: '10', zh: 'Gate 交付', en: 'DELIVERY.RESULT', x: 85, y: 525 },
+  verify:   { no: '11', zh: '核验交付', en: 'CHECK-DELIVERY', x: 85, y: 350 },
+};
+const ORDER = ['contract', 'cred', 'worker', 'frozen', 'test', 'review', 'verdict', 'adjud', 'anchor', 'gate', 'verify'];
+for (const k in N) { N[k].w = N[k].w || 140; N[k].h = N[k].h || 86; }
+const SUB = { files: { zh: '文件', x: 635 }, cmd: { zh: '命令', x: 720 }, edit: { zh: '编辑', x: 805 } };
+const OBS = { x: 255, y: 350 };
+
+function pts(a, b) {
+  const A = N[a], B = N[b];
+  if (a === 'worker' && b === 'frozen') return [[A.x + A.w / 2, A.y], [B.x, A.y], [B.x, B.y - B.h / 2]];
+  if (A.x === B.x) { const d = Math.sign(B.y - A.y); return [[A.x, A.y + d * A.h / 2], [B.x, B.y - d * B.h / 2]]; }
+  if (A.y === B.y) { const d = Math.sign(B.x - A.x); return [[A.x + d * A.w / 2, A.y], [B.x - d * B.w / 2, B.y]]; }
+  return [[A.x, A.y], [B.x, B.y]];
+}
+
+/* floor grid */
+const floor = el('g', {}, svg);
+for (let x = 0; x <= 1200; x += 40) el('line', { x1: x, y1: 0, x2: x, y2: 700, stroke: 'var(--grid)', 'stroke-width': 1, opacity: .45 }, floor);
+for (let y = 0; y <= 700; y += 40) el('line', { x1: 0, y1: y, x2: 1200, y2: y, stroke: 'var(--grid)', 'stroke-width': 1, opacity: .45 }, floor);
+
+/* pipes */
+const pipes = el('g', {}, svg);
+for (let i = 0; i < ORDER.length - 1; i++) {
+  const p = pts(ORDER[i], ORDER[i + 1]).map(q => q.join(',')).join(' ');
+  el('polyline', { points: p, class: 'pipe' }, pipes); el('polyline', { points: p, class: 'pipe-in' }, pipes);
+}
+/* worker sub-stations */
+for (const k in SUB) {
+  const s = SUB[k];
+  el('line', { x1: s.x, y1: 82, x2: s.x, y2: N.worker.y - N.worker.h / 2, stroke: 'var(--pipe)', 'stroke-width': 3, 'stroke-dasharray': '3 4' }, pipes);
+  el('rect', { x: s.x - 34, y: 46, width: 68, height: 36, class: 'sub-st' }, pipes);
+  txt(pipes, s.x, 70, s.zh, 'sub-tx');
+}
+txt(pipes, 720, 34, '工具调用要先过 Gate', 'cap');
+const patrol = el('g', { opacity: 0 }, svg);
+el('rect', { x: 454, y: 48, width: 128, height: 30, fill: 'var(--ink)', stroke: 'var(--ok)', 'stroke-width': 2 }, patrol);
+txt(patrol, 518, 68, '巡检：信任链✓ 指纹✓', 'cap').setAttribute('style', 'fill:var(--ok);font-size:11px');
+function flashPatrol() { tween(800, p => patrol.setAttribute('opacity', p < .7 ? 1 : (1 - p) / .3), false).catch(() => {}); }
+
+/* nodes */
+const nodeEls = {};
+const ICON = { contract: 'doc', verify: 'shield', cred: 'key', worker: 'gear', frozen: 'ice', test: 'list', review: 'lens', verdict: 'scale', adjud: 'book', gate: 'gatei', anchor: 'anchor' };
+for (const k of ORDER) {
+  const n = N[k], g = el('g', { class: 'node', 'data-state': 'idle' }, svg);
+  const x0 = n.x - n.w / 2, y0 = n.y - n.h / 2, x1 = x0 + n.w, y1 = y0 + n.h;
+  el('rect', { x: x0 - 6, y: y0 - 6, width: n.w + 12, height: n.h + 12, class: 'n-glow' }, g);
+  el('rect', { x: x0 + 6, y: y0 + 6, width: n.w, height: n.h, class: 'n-shadow' }, g);
+  el('rect', { x: x0, y: y0, width: n.w, height: n.h, class: 'n-body' }, g);
+  el('polyline', { points: `${x0 + 2},${y1 - 3} ${x0 + 2},${y0 + 2} ${x1 - 3},${y0 + 2}`, class: 'n-hi' }, g);
+  el('polyline', { points: `${x0 + 3},${y1 - 2} ${x1 - 2},${y1 - 2} ${x1 - 2},${y0 + 3}`, class: 'n-lo' }, g);
+  el('rect', { x: x0 + 4, y: y0 + 4, width: n.w - 8, height: 15, class: 'n-band' }, g);
+  txt(g, x0 + 10, y0 + 15, n.no, 'n-no', 'start');
+  el('rect', { x: x1 - 16, y: y0 + 8, width: 7, height: 7, class: 'n-lamp' }, g);
+  const ic = sprite(ICON[k], 3, g); ic.setAttribute('transform', `translate(${x0 + 12},${y0 + 27})`);
+  if (k === 'worker') { txt(g, x0 + 52, y0 + 44, n.zh, 'n-zh', 'start'); txt(g, x0 + 52, y0 + 58, n.en, 'n-en', 'start'); }
+  else { txt(g, x0 + 50, y0 + 49, n.zh, 'n-zh', 'start'); txt(g, n.x, y1 - 9, n.en, 'n-en'); }
+  const marks = el('g', {}, g);
+  const t = el('title', {}, g); t.textContent = `${n.zh}（${n.en.toLowerCase()}）`;
+  nodeEls[k] = { g, marks, count: 0 };
+}
+/* startup self-check strip, above the floor (global coordinates) */
+const LAMPS = ['配置与契约', '信任链', '发行清单', 'OBS 启动', '锚点核对', '框架指纹', '授权书', 'Root 记忆', '命令隔离', '审查独立', 'Worker 试启动'];
+const strip = el('g', {}, svgEl);
+el('rect', { x: 20, y: 10, width: 1160, height: 100, fill: 'var(--floor)', stroke: 'var(--grid)', 'stroke-width': 2 }, strip);
+txt(strip, 36, 33, '启动自检 · 提交任务之前，任何一关不过就拒绝启动（记 startup.refused）', 'cap', 'start').setAttribute('style', 'fill:var(--fg);font-weight:700');
+const rootLabel = txt(strip, 1166, 33, '', 'root-ok', 'end');
+const LX = i => 80 + i * 104, LY = 64;
+el('line', { x1: LX(0), y1: LY, x2: LX(10), y2: LY, stroke: 'var(--pipe)', 'stroke-width': 4 }, strip);
+const lampEls = LAMPS.map((zh, i) => {
+  const g = el('g', { class: 'lamp', 'data-state': 'idle' }, strip);
+  el('rect', { x: LX(i) - 11, y: LY - 11, width: 22, height: 22, class: 'l-box' }, g);
+  txt(g, LX(i), LY + 4, String(i + 1), 'l-no'); txt(g, LX(i), LY + 30, zh, 'l-zh');
+  return g;
+});
+const lampAt = i => ({ x: LX(i) + 8, y: LY - 120 - 46 });
+const agentLabel = txt(svg, N.worker.x, N.worker.y + N.worker.h / 2 + 20, '', 'cap');
+/* sub-task chips inside the Worker station */
+const chipG = el('g', {}, svg);
+const chipLabel = txt(svg, N.worker.x - N.worker.w / 2 + 52, N.worker.y + 44, '', 'cap', 'start');
+function drawChips(list) {
+  chipG.textContent = '';
+  list.forEach((c, i) => {
+    const col = { wait: 'var(--grid)', run: 'var(--gold)', ok: 'var(--ok)', bad: 'var(--bad)' }[c.st];
+    el('rect', { x: N.worker.x - N.worker.w / 2 + 52 + i * 26, y: N.worker.y + 14, width: 20, height: 12, fill: col, stroke: 'var(--band)', 'stroke-width': 2 }, chipG);
+  });
+  const run = list.findIndex(c => c.st === 'run' || c.st === 'bad'), done = list.filter(c => c.st === 'ok').length;
+  chipLabel.textContent = list.length ? `子任务 ${done}/${list.length}` : '';
+}
+/* agent dock: where the configured worker comes from */
+const DOCK = { x: 1070, y: 112 };
+const dock = el('g', {}, svg);
+el('rect', { x: 966, y: 28, width: 210, height: 90, class: 'n-shadow' }, dock);
+el('rect', { x: 960, y: 22, width: 210, height: 90, class: 'n-body' }, dock);
+el('rect', { x: 964, y: 26, width: 202, height: 15, fill: 'var(--gold)' }, dock);
+txt(dock, 970, 37, 'AGENT 接入口', 'n-no', 'start').setAttribute('style', 'fill:var(--ink)');
+txt(dock, 970, 58, '[models.worker]', 'cap-px', 'start');
+const dockTx = txt(dock, 970, 76, '', 'dock-tx', 'start');
+el('rect', { x: 1052, y: 86, width: 36, height: 26, fill: 'var(--ink)', stroke: 'var(--band)', 'stroke-width': 2 }, dock);
+const REVIEWER_DEMO = '[models.reviewer] glm-5.3 · 新开会话，看不到 Worker 的对话';
+const reviewerCap = txt(svg, 1105, 614, REVIEWER_DEMO, 'cap', 'middle'); reviewerCap.setAttribute('style', 'font-size:11px');
+
+/* OBS reconciliation lines (under the booth) */
+const recon = el('g', {}, svg);
+let sealed = [];
+
+/* OBS notary booth */
+const booth = el('g', {}, svg);
+el('rect', { x: OBS.x - 70, y: OBS.y - 48, width: 140, height: 96, class: 'n-body' }, booth);
+el('rect', { x: OBS.x - 68, y: OBS.y - 46, width: 136, height: 16, fill: 'var(--seal)' }, booth);
+txt(booth, OBS.x - 62, OBS.y - 34, 'OBS', 'n-no', 'start');
+const boothSeal = el('g', { transform: `translate(${OBS.x - 17},${OBS.y - 22})` }, booth);
+el('rect', { width: 34, height: 34, class: 'seal-r' }, boothSeal); txt(boothSeal, 17, 24, '证', 'seal-t');
+txt(booth, OBS.x, OBS.y + 30, 'OBS 独立旁证', 'n-en').setAttribute('style', 'font:500 12px var(--f-zh);fill:var(--fg)');
+txt(booth, OBS.x, OBS.y + 44, '另一进程·自己的密钥签回执', 'cap').setAttribute('style', 'font-size:10px');
+const boothNote = txt(svg, OBS.x, OBS.y + 66, '', 'recon-ok');
+const boothNote2 = txt(svg, OBS.x, OBS.y + 82, '', 'recon-bad');
+
+/* ledger tape */
+const tapeY = 640;
+el('rect', { x: 20, y: tapeY - 18, width: 1160, height: 44, class: 'tape-bg' }, svg);
+txt(svg, 30, tapeY - 24, 'LEDGER · 只追加账本', 'cap-px', 'start');
+const tape = el('g', {}, svg);
+let tapeN = 0;
+
+/* banner */
+const banner = el('g', { class: 'banner', opacity: 0 }, svg);
+const bRect = el('rect', { x: 470, y: 300, width: 500, height: 96 }, banner);
+const bT = txt(banner, 720, 342, '', 'bt'); const bS = txt(banner, 720, 372, '', 'bs');
+
+/* ---------- actors ---------- */
+const layer = el('g', {}, svg);
+function makeActor(kind) {
+  const g = el('g', {}, layer), body = el('g', { class: 'bob' }, g); sprite(kind, 4, body);
+  const bub = el('g', { class: 'bub', opacity: 0 }, g); const br = el('rect', { x: 0, y: -30, height: 24 }, bub); const bt = el('text', { x: 24, y: -13, 'text-anchor': 'middle' }, bub);
+  return { kind, g, body, bub, br, bt, x: 0, y: 0 };
+}
+function place(a, x, y) { a.x = x; a.y = y; a.g.setAttribute('transform', `translate(${x - 24},${y - 40})`); }
+function say(a, s, tone = '') {
+  if (!a) return; a.bub.setAttribute('class', 'bub ' + tone); a.bt.textContent = s; a.bub.setAttribute('opacity', s ? 1 : 0);
+  const w = Math.max(40, (a.bt.getComputedTextLength ? a.bt.getComputedTextLength() : s.length * 12) + 18);
+  a.br.setAttribute('x', 24 - w / 2); a.br.setAttribute('width', w);
+}
+let worker = null, fox = null, pkg = null, pkgAt = null;
+
+/* ---------- timing ---------- */
+let speed = 1, boost = 1, paused = false, token = { dead: false };
+const CANCEL = Symbol('cancel');
+function tween(ms, fn, motion = true) {
+  const tk = token;
+  return new Promise((res, rej) => {
+    if (tk.dead) return rej(CANCEL);
+    if ((reduce && motion) || ms <= 0) { fn(1); return res(); }
+    let t = 0, last = performance.now();
+    const f = now => { if (tk.dead) return rej(CANCEL); const dt = now - last; last = now; if (!paused) t += dt * speed * boost; const p = Math.min(1, t / ms); fn(p); p < 1 ? requestAnimationFrame(f) : res(); };
+    requestAnimationFrame(f);
+  });
+}
+const wait = ms => tween(ms, () => {}, false);
+const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+function along(points, p) {
+  const segs = []; let total = 0;
+  for (let i = 0; i < points.length - 1; i++) { const [a, b] = [points[i], points[i + 1]]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]); segs.push([a, b, l]); total += l; }
+  let d = p * total;
+  for (const [a, b, l] of segs) { if (d <= l) { const r = l ? d / l : 0; return [a[0] + (b[0] - a[0]) * r, a[1] + (b[1] - a[1]) * r]; } d -= l; }
+  return points[points.length - 1];
+}
+
+/* ---------- effects ---------- */
+let cur = null;
+function setState(k, s) { if (k) nodeEls[k].g.dataset.state = s; }
+async function travel(a, b) {
+  const line = pts(a, b), dot = el('g', {}, svg);
+  el('circle', { r: 11, fill: 'var(--gold)', opacity: .25 }, dot); el('rect', { x: -5, y: -5, width: 10, height: 10, fill: 'var(--gold)' }, dot);
+  try { await tween(650, p => { const [x, y] = along(line, ease(p)); dot.setAttribute('transform', `translate(${x},${y})`); }); }
+  finally { dot.remove(); }
+}
+async function stamp(k, bad = false, at = null) {
+  const n = k ? N[k] : null, s = el('g', {}, svg);
+  el('rect', bad ? { width: 30, height: 30, fill: 'var(--ink)', stroke: 'var(--seal)', 'stroke-width': 3 } : { width: 30, height: 30, class: 'seal-r' }, s);
+  txt(s, 15, 21, bad ? '拒' : '证', 'seal-t').setAttribute('style', bad ? 'fill:var(--seal);font-size:15px' : 'font-size:15px');
+  const tx = at ? at.x : n.x + n.w / 2 - 22, ty = at ? at.y : n.y - n.h / 2 - 34;
+  try {
+    await tween(520, p => { const e = ease(p); const x = OBS.x - 15 + (tx - OBS.x + 15) * e, y = OBS.y - 15 + (ty - OBS.y + 15) * e - 70 * Math.sin(Math.PI * p); s.setAttribute('transform', `translate(${x},${y})`); });
+    await tween(160, p => s.setAttribute('transform', `translate(${tx},${ty + 14 * p}) scale(${1 - .2 * p})`));
+  } finally { s.remove(); }
+  if (!bad) sealed.push({ x: k ? n.x + n.w / 2 - 22 : tx, y: k ? n.y - n.h / 2 - 20 : ty, cell: null });
+  const m = k && nodeEls[k]; if (m && !bad) { const i = m.count++; el('rect', { x: n.x + n.w / 2 - 28 - i * 9, y: n.y - n.h / 2 + 8, width: 7, height: 7, fill: 'var(--seal)' }, m.marks); }
+}
+async function walk(a, x, y, ms = 520) { const x0 = a.x, y0 = a.y; await tween(ms, p => { const e = ease(p); place(a, x0 + (x - x0) * e, y0 + (y - y0) * e); }); }
+const home = () => [N.worker.x + 72, N.worker.y + 47];
+async function moveCrate(k) {
+  const n = N[k], x = n.x - 16, y = n.y - n.h / 2 - 34;
+  if (!pkg.shown) { pkg.g.setAttribute('opacity', 1); pkg.shown = true; pkg.x = x; pkg.y = y; pkg.g.setAttribute('transform', `translate(${x},${y})`); return; }
+  const x0 = pkg.x, y0 = pkg.y; await tween(420, p => { const e = ease(p); pkg.g.setAttribute('transform', `translate(${x0 + (x - x0) * e},${y0 + (y - y0) * e})`); }); pkg.x = x; pkg.y = y;
+}
+let seq = 4021, clock = 0;
+const cells = new Map();
+function tsText(ts) {
+  const d = typeof ts === 'number' ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date(ts);
+  return isNaN(d) ? String(ts).slice(11, 19) : d.toLocaleTimeString('zh-CN', { hour12: false });
+}
+function addLog(s, obsMark, ledger = true) {
+  const li = document.createElement('li'); li.className = s.state === 'ok' ? 'ok' : s.state === 'bad' ? 'bad' : '';
+  if (s.seq !== undefined) seq = s.seq;
+  let hh;
+  if (s.ts !== undefined) hh = tsText(s.ts);
+  else if (typeof source !== 'undefined' && source !== 'demo') hh = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  else { const t = new Date(Date.UTC(2026, 9, 18, 9, 45, 29) + clock); clock += 400 + Math.round(Math.random() * 1400); hh = t.toISOString().slice(11, 19); }
+  if (s.seq !== undefined) li.onclick = e => { if (e.target.closest('pre')) return; showEvent(li, s); };
+  li.innerHTML = `<span class="seq">${ledger ? seq : '—'}</span><span><span class="kind"></span>${obsMark ? ' <span class="obs">· OBS 回执</span>' : ''}${s.forged ? ' <span class="forge">· 伪造 · 没有 OBS 回执</span>' : ''}<br><span class="zh"></span></span>`;
+  li.querySelector('.kind').textContent = `${hh} ${s.k}${s.forged ? ' PASS' : ''}`; li.querySelector('.zh').textContent = typeof s.zh === 'function' ? s.zh() : s.zh;
+  logEl.appendChild(li); logEl.scrollTop = logEl.scrollHeight;
+  if (!ledger) return;
+  const col = s.state === 'ok' ? 'var(--ok)' : s.state === 'bad' ? 'var(--bad)' : 'var(--band)';
+  const i = tapeN++, x = 30 + (i % 76) * 15;
+  if (i && i % 76 === 0) while (tape.firstChild) tape.firstChild.remove();
+  const cell = el('rect', s.forged ? { x, y: tapeY - 8, width: 11, height: 24, fill: 'var(--ink)', stroke: 'var(--bad)', 'stroke-width': 2, 'stroke-dasharray': '3 2' }
+                                    : { x, y: tapeY - 8, width: 11, height: 24, fill: col }, tape);
+  if (obsMark) { el('rect', { x: x + 3, y: tapeY - 14, width: 5, height: 5, fill: 'var(--seal)' }, tape); if (sealed.length) sealed[sealed.length - 1].cell = cell; }
+  if (s.forged) forged = { x: x + 5, cell, seq };
+  cells.set(seq, cell);
+  seq++;
+  return cell;
+}
+let forged = null;
+function tick(x, y, ok) {
+  const g = el('g', { transform: `translate(${x - 9},${y - 9})` }, recon);
+  el('rect', { width: 18, height: 18, fill: ok ? 'var(--ok)' : 'var(--bad)' }, g);
+  txt(g, 9, 14, ok ? '✓' : '✗', 'seal-t').setAttribute('style', 'fill:var(--ink);font-size:13px');
+}
+/* Read-only adjudicator: ledger receipts <-> OBS log rows, both ways, then the log's own chain and signed tail. */
+async function reconcileAnim(flagged = forged ? [forged] : []) {
+  const sx = OBS.x, sy = OBS.y;
+  boothNote.textContent = 'OBS 日志 ⇄ 账本 对账中…'; boothNote2.textContent = '';
+  const ray = async (x, y, col) => {
+    const ln = el('line', { x1: sx, y1: sy, x2: sx, y2: sy, stroke: col, 'stroke-width': 2, 'stroke-dasharray': '6 5' }, recon);
+    await tween(300, p => { ln.setAttribute('x2', sx + (x - sx) * p); ln.setAttribute('y2', sy + (y - sy) * p); });
+    return ln;
+  };
+  for (const t of sealed) {
+    const ln = await ray(t.x, t.y, 'var(--seal)');
+    tick(t.x, t.y, true); ln.setAttribute('opacity', .3);
+    if (t.cell) t.cell.setAttribute('stroke', 'var(--ok)'), t.cell.setAttribute('stroke-width', 2);
+    await wait(120);
+  }
+  for (const f of flagged) {
+    const ln = await ray(f.x, tapeY - 18, 'var(--bad)');
+    tick(f.x, tapeY - 26, false); ln.setAttribute('opacity', .6);
+  }
+  if (flagged.length) {
+    boothNote.textContent = '日志哈希链✓ 末行签名✓'; boothNote2.textContent = `账本 seq ${flagged.map(f => f.seq).join('、')} 和 OBS 日志对不上`;
+  } else boothNote.textContent = '每一行都对上 · 日志哈希链✓ 末行签名✓';
+  await wait(700);
+}
+function showBanner(end) {
+  const c = { ok: 'var(--ok)', bad: 'var(--bad)', unk: 'var(--unk)' }[end.tone];
+  bRect.setAttribute('stroke', c); bT.setAttribute('fill', c); bT.textContent = end.text; bS.textContent = end.sub; banner.setAttribute('opacity', 1);
+}
+
+/* ---------- scenarios ---------- */
+const NAMES = { whale: 'DeepSeek（原生 Worker）', crab: 'Claude Code（外部 Agent）', dragon: 'Codex（外部 Agent）', robot: '其他模型（原生 Worker）' };
+const SHORT = { whale: 'DeepSeek', crab: 'Claude Code', dragon: 'Codex', robot: '其他模型' };
+const MODEL = { whale: 'deepseek-flash', robot: 'other-model' };
+const ADAPTER = { whale: 'kind = "openai_compat" · deepseek-flash', crab: 'kind = "cli" · claude -p --output-format json', dragon: 'kind = "cli" · codex exec --json', robot: 'kind = "openai_compat" · other-model' };
+const NATIVE = k => k === 'whale' || k === 'robot';
+
+/* Worker detail panel */
+const $ = id => document.getElementById(id);
+const D = {
+  round: 0, max: 15, tok: 0, tree: [],
+  reset(w, sc) {
+    this.round = 0; this.tok = 0;
+    $('d-agent').textContent = NAMES[w]; $('d-adapter').textContent = ADAPTER[w];
+    $('d-call').textContent = '还没开工'; $('d-round').textContent = NATIVE(w) ? `0 / ${this.max}` : '由外部 Agent 自己决定';
+    $('d-tok').textContent = '0 tokens';
+    this.tree = sc === 'root' ? [] : [{ id: sc === 'split' ? 'expenses-1' : 'wordstats-1', file: sc === 'split' ? '总任务 · 并回后总验收' : 'wordstats.py', st: 'wait', parent: true }];
+    this.draw();
+  },
+  call(s) { $('d-call').textContent = s; },
+  step() { this.round++; $('d-round').textContent = `${this.round} / ${this.max}`; },
+  add(n) { this.tok += n; $('d-tok').textContent = `${this.tok.toLocaleString('en-US')} tokens · 上限 2,000,000`; },
+  set(id, st) { const t = this.tree.find(x => x.id === id); if (t) t.st = st; this.draw(); },
+  draw() {
+    const ol = $('d-tree'); ol.textContent = '';
+    const kids = this.tree.filter(t => !t.parent);
+    $('d-sum').textContent = !this.tree.length ? '没有提交任务' : kids.length ? `拆成 ${kids.length} 个子任务` : '1 个任务，没有拆分';
+    const LBL = { wait: '等待', run: '进行中', ok: '通过', bad: '修复中', fail: '失败' };
+    for (const t of this.tree) {
+      const li = document.createElement('li'); li.className = t.parent ? '' : 'child';
+      const ic = document.createElementNS(NS, 'svg'); ic.setAttribute('viewBox', '0 0 48 40'); ic.setAttribute('width', 22); ic.setAttribute('height', 18);
+      sprite(wkind, 4, ic);
+      const mid = document.createElement('span'); mid.innerHTML = '<b></b><span class="sc"></span>';
+      mid.querySelector('b').textContent = t.id; mid.querySelector('.sc').textContent = t.parent ? t.file : `只许写 ${t.file}${t.budget ? ' · 预留 ' + t.budget : ''}`;
+      const chip = document.createElement('span'); chip.className = 'chip ' + t.st; chip.textContent = LBL[t.st];
+      li.append(ic, mid, chip); ol.appendChild(li);
+    }
+    drawChips(kids);
+  },
+};
+function startupSeq({ fail = null, warn = null, root = 'fa61f0d84958eaa2' } = {}) {
+  const out = [];
+  for (let i = 0; i < LAMPS.length; i++) {
+    const st = fail && fail.at === i ? 'bad' : warn && warn.at === i ? 'warn' : 'ok', step = { lamp: i, st };
+    if (i === 7) Object.assign(step, { k: 'release.checked', obs: st === 'ok', zh: `代码和配置对上 Root ${root} 签名的发行清单，请 OBS 盖章`,
+      fx: () => { rootLabel.textContent = `Root ${root} · ${domain}`; rootLabel.setAttribute('class', root === 'fa61f0d84958eaa2' ? 'root-ok' : 'root-bad'); } });
+    if (st === 'warn') Object.assign(step, { k: 'anchor.warning', state: 'bad', zh: warn.zh });
+    if (st === 'bad') step.refuse = fail;
+    out.push(step);
+    if (st === 'bad') break;
+  }
+  return out;
+}
+const SUBMIT = zh => ({ k: 'task.submitted', n: 'contract', obs: true, zh });
+const say2 = async t => { say(worker, t); await wait(900); say(worker, ''); };
+const oops = async t => { say(worker, t, 'bad'); await wait(1100); say(worker, ''); setState('worker', 'active'); };
+const busy = async ms => { let shown = -1; await tween(ms, p => { const s = Math.round(p * ms * 0.06); if (s !== shown) { shown = s; say(worker, `工作中 ${s}s · 里面看不见`); } }, false); say(worker, ''); };
+async function enter() {
+  worker.g.setAttribute('opacity', 1); say(worker, '报到');
+  await walk(worker, DOCK.x, DOCK.y + 48, 300);
+  await walk(worker, ...home(), 900); say(worker, '');
+}
+function workNative(cheat) {
+  const m = MODEL[wkind];
+  const s = [
+    { k: 'credential.issued', n: 'cred', obs: true, zh: '框架签发任务凭证：工具和预算都不宽于授权书；Worker 从接入口报到', fx: enter },
+    { k: 'model.called', n: 'worker', round: true, tok: 3120, call: `${m} 想下一步（回复只是提议）`, zh: `${m} 第 1 轮：回复只是提议，是数据`, fx: () => say2('先看看有哪些文件…') },
+    { k: 'effect.intent', n: 'worker', call: 'list_files .', zh: '提议 list_files → Gate 放行', fx: () => walk(worker, SUB.files.x, 122) },
+    { k: 'effect.result', n: 'worker', zh: 'list_files 完成：check.py', fx: () => walk(worker, ...home()) },
+    { k: 'model.called', n: 'worker', round: true, tok: 4870, call: `${m} 写代码`, zh: `${m} 第 2 轮：写 wordstats.py` },
+    { k: 'effect.intent', n: 'worker', call: 'write_file wordstats.py', zh: '提议 write_file wordstats.py → Gate 放行', fx: () => walk(worker, SUB.edit.x, 122) },
+    { k: 'effect.result', n: 'worker', zh: '写入完成（46 行）', fx: () => walk(worker, ...home()) },
+  ];
+  if (cheat) s.push({ k: 'gate.denied', n: 'worker', state: 'bad', round: true, tok: 2210, call: 'edit_file check.py（被拒）', zh: '被拦下：check.py 是受保护文件，不许改', fx: () => oops('改 check.py…') });
+  s.push(
+    { k: 'gate.denied', n: 'worker', state: 'bad', round: true, tok: 1980, call: 'run_command pip install（被拒）', zh: '被拦下：pip install 要联网，契约没给网络', fx: () => oops('想联网装个包…') },
+    { k: 'model.called', n: 'worker', round: true, tok: 2650, call: `${m} 改用标准库自测`, zh: `${m} 换个办法：只用标准库` },
+    { k: 'effect.intent', n: 'worker', call: 'run_command python check.py', zh: '提议 run_command python check.py → 放行（隔离运行）', fx: () => walk(worker, SUB.cmd.x, 122) },
+    { k: 'effect.result', n: 'worker', zh: '自测通过：退出码 0', fx: () => walk(worker, ...home()) },
+  );
+  return s;
+}
+function workExternal(w) { return [
+  { k: 'credential.issued', n: 'cred', obs: true, zh: '框架签发任务凭证；外部 Agent 先试启动一次确认能用，再从接入口报到', fx: enter },
+  { k: 'effect.intent', n: 'worker', call: `${SHORT[w]} 在工作（框架看不见它的具体调用）`, zh: `交给 ${SHORT[w]}：只给白名单环境变量，不给 M2 的任何密钥`, fx: () => busy(4200) },
+  { k: 'effect.result', n: 'worker', tok: 18240, call: '外部 Agent 已退出', zh: `${SHORT[w]} 退出码 0 · 自报用量 18,240 tokens（它说的话不采用）` },
+]; }
+function closing(pid, check = 'python check.py') { return [
+  { k: 'test.result', n: 'test', state: 'ok', obs: true, crate: true, zh: `任务方的验收：${check} → 退出码 0` },
+  { k: 'model.called', n: 'review', crate: true, zh: 'GLM-5.3 被叫来审查：另一家公司，看不到 Worker 的对话', fx: async () => { fox.g.setAttribute('opacity', 1); await walk(fox, 1000, 600, 700); await walk(fox, N.review.x + 92, 600, 600); } },
+  { k: 'audit.result', n: 'review', state: 'ok', obs: true, zh: '审查结论 GO：只用标准库，验收文件没动', fx: async () => { say(fox, 'GO ✓', 'ok'); await wait(900); } },
+  { k: 'verdict', n: 'verdict', state: 'ok', obs: true, crate: true, tree: [pid, 'ok'], zh: '内核判定 PASS（验收 PASS + 审查 GO）' },
+  { k: 'gate.adjudication', n: 'adjud', state: 'ok', crate: true, fx: () => reconcileAnim(), zh: '只读裁决器只凭账本从头重算，并和 OBS 日志双向对账（每张回执都在日志里，日志里本任务每行都对得上账本），再验日志哈希链和末行签名：PASS' },
+  { k: 'anchor.checkpoint', n: 'anchor', obs: true, zh: '放行之前先请 OBS 给账本当前位置签检查点' },
+  { k: 'anchor.published', n: 'anchor', state: 'ok', zh: '检查点写进锚点文件，推到 ledger-anchors 分支（先 rebase，只快进，不强推）' },
+  { k: 'delivery.result', n: 'gate', state: 'ok', obs: true, crate: true, zh: '检查点就位，Gate 放行：暂存的成品放出到 out/，旁边写便携回执' },
+  { k: 'm2k check-delivery', n: 'verify', state: 'ok', nolog: true, zh: '任务方自己的命令（不写账本）：交付目录每一项都有便携回执，对得上 OBS' },
+]; }
+function split(w) {
+  const native = NATIVE(w);
+  const kids = [
+    { id: 'expenses-records', file: 'records.py', check: 'check_records.py' },
+    { id: 'expenses-summary', file: 'summary.py', check: 'check_summary.py', repair: true },
+    { id: 'expenses-cli', file: 'cli.py', check: 'check_cli.py' },
+  ];
+  const s = [
+    ...startupSeq(), SUBMIT('自检全过，提交任务：记账报表小工具 expenses（读记录、汇总、命令行），plan = "model"'),
+    { k: 'credential.issued', n: 'cred', obs: true, zh: '框架签发父任务凭证；Worker 从接入口报到', fx: enter },
+    { k: 'plan.proposed', n: 'worker', round: true, tok: 5400, call: '规划模型 deepseek-flash：拆任务', zh: '规划模型提出拆成 3 个子任务：只能选任务方给的检查，不能自己写验收', fx: async () => { D.tree.push(...kids.map(c => ({ id: c.id, file: c.file, st: 'wait' }))); D.draw(); await say2('拆成 3 块'); } },
+    { k: 'plan.accepted', n: 'worker', zh: '方案过 Gate：每个子任务的写入范围、验收和预算都在授权内' },
+  ];
+  const write = (c, verb, tok, ms) => native ? [
+    { k: 'effect.intent', n: 'worker', round: true, tok, call: `${verb} ${c.file}`, zh: `提议 ${verb} ${c.file} → Gate 放行`, fx: () => walk(worker, SUB.edit.x, 122) },
+    { k: 'effect.result', n: 'worker', zh: `${c.file} 写好了`, fx: () => walk(worker, ...home()) },
+  ] : [
+    { k: 'effect.intent', n: 'worker', call: `${SHORT[w]} 在处理 ${c.file}（看不见具体调用）`, zh: `交给 ${SHORT[w]}：${c.file}`, fx: () => busy(ms) },
+    { k: 'effect.result', n: 'worker', tok: tok * 2, zh: `${SHORT[w]} 退出码 0` },
+  ];
+  for (const c of kids) {
+    s.push(
+      { k: 'budget.reserved', n: 'worker', call: `预留 400,000 tokens 给 ${c.id}`, zh: `为 ${c.id} 预留 400,000 tokens：同一事务里从父预算扣，抢不到就不开工`, fx: () => { D.tree.find(t => t.id === c.id).budget = '400k'; D.draw(); } },
+      { k: 'subtask.started', n: 'worker', tree: [c.id, 'run'], call: `子任务 ${c.id}`, zh: `${c.id} 开工：自己的工作区和凭证，只许写 ${c.file}，凭证不宽于父凭证` },
+      ...write(c, 'write_file', 4100, 2200),
+    );
+    if (c.repair) s.push(
+      { k: 'test.result', n: 'worker', state: 'bad', tree: [c.id, 'bad'], call: `${c.check} 失败`, zh: `子任务验收 ${c.check} 失败：退款没从合计里扣`, fx: () => oops('合计算错了…') },
+      { k: 'repair.started', n: 'worker', call: '有界修复 1/2', zh: '有界修复 1/2：凭账本里的失败事实修，次数有上限，预算不重置' },
+      ...write(c, 'edit_file', 3300, 1600),
+    );
+    s.push(
+      { k: 'test.result', n: 'worker', state: 'ok', call: `验收 ${c.check}`, zh: `子任务验收 ${c.check} → PASS；GLM 审查 GO` },
+      { k: 'subtask.finished', n: 'worker', tree: [c.id, 'ok'], zh: `${c.id} 通过：只把 ${c.file} 并回父工作区，释放预留、只算实际用量`, fx: async () => setState('worker', 'active') },
+    );
+  }
+  s.push(
+    { k: 'worker.stopped', n: 'worker', zh: '三个子任务都并回了，父任务停下' },
+    { k: 'candidate.frozen', n: 'frozen', obs: true, crate: true, zh: '冻结父任务成品：records.py + summary.py + cli.py' },
+    ...closing('expenses-1', 'tasks/T29 的总验收'),
+  );
+  return { steps: s, end: { tone: 'ok', text: '已交付 · 3 个子任务', sub: '每个子任务单独验收和审查，合并后再总验收' } };
+}
+const WS = '自检全过，提交任务：写 wordstats.py；check.py 是任务方的验收，受保护';
+function build(sc, w) {
+  if (sc === 'root') return { steps: startupSeq({ root: '9c3e71a0b2d4f617', fail: { at: 7, obs: true, zh: `OBS 拒绝 · ROOT_CHANGED：${domain} 首次见到 fa61f0d84958eaa2，现在是 9c3e71a0b2d4f617` } }),
+    end: { tone: 'bad', text: '拒绝启动 · ROOT_CHANGED', sub: '没提交任务、没调用模型、Worker 根本没进场' } };
+  if (sc === 'code') return { steps: startupSeq({ fail: { at: 2, zh: 'RELEASE_CODE：m2k/kernel.py 被改过，和 Root 签名的发行清单对不上' } }),
+    end: { tone: 'bad', text: '拒绝启动 · RELEASE_CODE', sub: '改框架代码 = 要所有者用 Root 重签清单，Agent 做不到' } };
+  if (sc === 'anchor' && domain === 'PRODUCTION') return { steps: startupSeq({ fail: { at: 4, zh: 'ANCHOR_CHECK：ledger-anchors 分支被强推过一次，锚点历史不再只追加' } }),
+    end: { tone: 'bad', text: '拒绝启动 · ANCHOR_CHECK', sub: '正式域：外部锚点核对不过就不启动' } };
+  if (sc === 'split') return split(w);
+  if (sc === 'forge') {
+    const st = [...startupSeq(), SUBMIT(WS), ...(NATIVE(w) ? workNative(false) : workExternal(w)),
+      { k: 'worker.stopped', n: 'worker', zh: 'Worker 停下：只看它留下的文件，不信它的说法' },
+      { k: 'candidate.frozen', n: 'frozen', obs: true, crate: true, zh: '冻结成品：wordstats.py + check.py · 摘要 3b9e05c1…' },
+      { k: 'test.result', n: 'test', state: 'bad', obs: true, crate: true, tree: ['wordstats-1', 'fail'], zh: '任务方的验收：python check.py → 退出码 1（并列的词没按字母排）' },
+      { k: 'verdict', n: 'verdict', state: 'bad', obs: true, crate: true, zh: '内核判定 FAIL（验收没过）' },
+      { k: 'verdict', n: 'verdict', state: 'bad', forged: true, zh: '有人绕过框架，直接往账本文件末尾补了一条 PASS，前一条的哈希也照算对了' },
+      { k: 'gate.adjudication', n: 'adjud', state: 'bad', crate: true, fx: () => reconcileAnim(),
+        zh: () => `只读裁决：账本最后一条判定是 PASS，但 no valid OBS receipt for verdict at seq ${forged ? forged.seq : '?'} → 不通过` },
+      { k: 'anchor.checkpoint', n: 'anchor', obs: true, zh: '检查点照签：伪造的那一行连同证据一起钉进外部锚点，以后删不掉' },
+      { k: 'anchor.published', n: 'anchor', state: 'ok', zh: '检查点推到 ledger-anchors 分支' },
+      { k: 'delivery.refused', n: 'gate', state: 'bad', zh: 'Gate 不放行：裁决不是 PASS，什么都不交付' },
+    ];
+    return { steps: st, end: { tone: 'bad', text: '未交付 · 账本尾巴是伪造的', sub: 'OBS 日志里没有那一行；OBS 停了则裁决为 UNKNOWN，同样不交付' } };
+  }
+  const cheat = sc === 'cheat';
+  const anchorWarn = sc === 'anchor' ? { warn: { at: 4, zh: '外部锚点核对：ledger-anchors 分支被强推过一次（测试域只警告并记账，继续启动）' } } : {};
+  const steps = [...startupSeq(anchorWarn), SUBMIT(WS), ...(NATIVE(w) ? workNative(cheat) : workExternal(w))];
+  steps.push({ k: 'worker.stopped', n: 'worker', zh: 'Worker 停下：只看它留下的文件，不信它的说法' });
+  if (cheat && !NATIVE(w)) {
+    steps.push(
+      { k: 'candidate.frozen', n: 'frozen', obs: true, crate: true, zh: '冻结成品，逐个文件算哈希 · 里面有被改过的 check.py' },
+      { k: 'test.result', n: 'test', state: 'bad', obs: true, crate: true, tree: ['wordstats-1', 'fail'], zh: '受保护文件 check.py 和任务方的原件对不上 → FAIL' },
+      { k: 'verdict', n: 'verdict', state: 'bad', obs: true, crate: true, zh: '内核判定 FAIL：作弊不给修复机会' },
+      { k: 'delivery.refused', n: 'gate', state: 'bad', crate: true, zh: 'Gate 不放行：没有 PASS 判定，什么都不交付' },
+    );
+    return { steps, end: { tone: 'bad', text: '未交付 · 作弊被发现', sub: `${SHORT[w]} 在里面改了 check.py，冻结后一比对就露馅` } };
+  }
+  steps.push({ k: 'candidate.frozen', n: 'frozen', obs: true, crate: true, zh: '冻结成品：wordstats.py + check.py · 摘要 770dd4d6…' }, ...closing('wordstats-1'));
+  return { steps, end: cheat
+    ? { tone: 'ok', text: '已交付 · 作弊没得逞', sub: '原生 Worker 改 check.py 的提议当场被 Gate 拦下' }
+    : sc === 'anchor' ? { tone: 'ok', text: '已交付 · 带警告', sub: '测试域：锚点警告已记账；换成正式域会拒绝启动' }
+    : { tone: 'ok', text: '已交付', sub: '每一步都记进账本，关键事件都有 OBS 的章' } };
+}
+
+/* ---------- runner ---------- */
+let scenario = 'normal', wkind = 'whale', domain = 'TEST_ONLY';
+async function stripTravel(a, b) {
+  const dot = el('rect', { x: -5, y: -5, width: 10, height: 10, fill: 'var(--gold)' }, svgEl);
+  try { await tween(260, p => dot.setAttribute('transform', `translate(${LX(a) + (LX(b) - LX(a)) * p},${LY})`)); } finally { dot.remove(); }
+}
+async function runLamp(s) {
+  const g = lampEls[s.lamp];
+  if (s.lamp > 0) await stripTravel(s.lamp - 1, s.lamp);
+  g.dataset.state = 'active'; if (s.fx) s.fx();
+  await wait(240);
+  if (s.k) { if (s.obs) await stamp(null, false, lampAt(s.lamp)); addLog(s, !!s.obs); }
+  if (s.refuse) { if (s.refuse.obs) await stamp(null, true, lampAt(s.lamp)); addLog({ k: 'startup.refused', zh: s.refuse.zh, state: 'bad' }, false); }
+  g.dataset.state = s.st;
+}
+function reset() {
+  token.dead = true; token = { dead: false }; paused = false; document.getElementById('pause').textContent = '暂停';
+  layer.textContent = ''; logEl.textContent = ''; tape.textContent = ''; tapeN = 0; seq = 4021; clock = 0; cur = null;
+  banner.setAttribute('opacity', 0); rootLabel.textContent = ''; recon.textContent = ''; sealed = []; forged = null; cells.clear(); boost = 1; boothNote.textContent = ''; boothNote2.textContent = ''; lampEls.forEach(g => g.dataset.state = 'idle');
+  for (const k of ORDER) { setState(k, 'idle'); nodeEls[k].count = 0; nodeEls[k].marks.textContent = ''; }
+  worker = makeActor(wkind); place(worker, DOCK.x, DOCK.y); worker.g.setAttribute('opacity', 0);
+  dockTx.textContent = ADAPTER[wkind]; D.reset(wkind, scenario);
+  fox = makeActor('fox'); place(fox, 1240, 600); fox.g.setAttribute('opacity', 0);
+  pkg = { g: el('g', { opacity: 0 }, layer), shown: false }; sprite('crate', 4, pkg.g);
+  agentLabel.textContent = NAMES[wkind]; reviewerCap.textContent = REVIEWER_DEMO;
+  document.getElementById('w-whale').closest('.group').querySelectorAll('button').forEach(b => b.disabled = scenario === 'root' || scenario === 'code' || (scenario === 'anchor' && domain === 'PRODUCTION'));
+}
+async function run() {
+  reset();
+  const { steps, end } = build(scenario, wkind);
+  try {
+    await wait(500);
+    for (const s of steps) {
+      if (s.lamp !== undefined) { await runLamp(s); continue; }
+      if (s.n === 'worker' && /effect\.intent|gate\.denied|plan\.proposed/.test(s.k)) flashPatrol();
+      if (cur && s.n !== cur) { if (nodeEls[cur].g.dataset.state === 'active') setState(cur, 'ok'); await travel(cur, s.n); }
+      cur = s.n; setState(s.n, s.state === 'bad' ? 'bad' : 'active');
+      if (s.n === 'worker') { const p = D.tree.find(t => t.parent); if (p && p.st === 'wait') D.set(p.id, 'run'); }
+      if (s.call) D.call(s.call);
+      if (s.round) D.step();
+      if (s.tok) D.add(s.tok);
+      if (s.tree) D.set(...s.tree);
+      if (s.crate) await moveCrate(s.n);
+      if (s.fx) await s.fx();
+      if (s.obs) await stamp(s.n);
+      if (s.obsRefuse) await stamp(s.n, true);
+      addLog(s, !!s.obs, !s.nolog);
+      if (s.state === 'ok') setState(s.n, 'ok');
+      await wait(650);
+    }
+    if (cur && nodeEls[cur].g.dataset.state === 'active') setState(cur, 'ok');
+    showBanner(end);
+  } catch (e) { if (e !== CANCEL) throw e; }
+}
+
+/* ---------- controls ---------- */
+function press(sel, btn) { document.querySelectorAll(sel).forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false')); }
+document.querySelectorAll('[data-sc]').forEach(b => b.onclick = () => { scenario = b.dataset.sc; press('[data-sc]', b); setSource('demo'); });
+document.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { wkind = b.dataset.w; press('[data-w]', b); setSource('demo'); });
+document.querySelectorAll('[data-dom]').forEach(b => b.onclick = () => { domain = b.dataset.dom; press('[data-dom]', b); setSource('demo'); });
+document.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => { speed = +b.dataset.sp; press('[data-sp]', b); });
+document.getElementById('pause').onclick = e => { paused = !paused; e.target.textContent = paused ? '继续' : '暂停'; };
+document.getElementById('restart').onclick = () => setSource(source, true);
+
+/* legend */
+const LEG = [['whale', 'DeepSeek', '原生 Worker / dsh'], ['crab', 'Claude', 'Claude Code'], ['dragon', 'GPT', 'Codex'], ['fox', 'GLM', '审查者'], ['robot', '其他', '别家模型']];
+const leg = document.getElementById('legend');
+for (const [k, a, b] of LEG) {
+  const d = document.createElement('div'); const s = document.createElementNS(NS, 'svg'); s.setAttribute('viewBox', '0 0 48 40'); s.setAttribute('width', 30); s.setAttribute('height', 25); sprite(k, 4, s);
+  d.appendChild(s); const t = document.createElement('span'); t.innerHTML = `<b></b> ${b}`; t.querySelector('b').textContent = a; d.appendChild(t); leg.appendChild(d);
+}
+const d2 = document.createElement('div'); d2.innerHTML = '<svg viewBox="0 0 30 30" width="20" height="20"><rect width="30" height="30" fill="var(--seal)"/></svg> <span><b>OBS 章</b> 关键事件的独立回执</span>'; leg.appendChild(d2);
+
+/* ---------- m2k live: the real ledger, read-only, through /api/* ---------- */
+const statusEl = $('status'), pick = $('task-pick');
+const setStatus = t => { statusEl.textContent = t; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const tsMs = ts => typeof ts === 'number' ? (ts > 1e12 ? ts : ts * 1000) : Date.parse(ts);
+const ANIMALS = new Set(['whale', 'crab', 'dragon', 'fox', 'robot']);
+const CRATE = new Set(['candidate.frozen', 'test.result', 'verdict', 'gate.adjudication', 'delivery.result', 'delivery.refused']);
+const TREE = { pass: 'ok', passed: 'ok', ok: 'ok', run: 'run', running: 'run', started: 'run', fail: 'fail', failed: 'fail', bad: 'bad', repair: 'bad', wait: 'wait' };
+let source = 'demo', server = false, followNewest = true;
+const L = { gen: 0, task: null, after: 0, queue: [], played: new Map(), pumping: false, done: false, quiet: 0, finished: false,
+            end: null, submitted: false, reviewerIn: false, lastLamp: null, busy: null, obs: true };
+
+async function api(path) {
+  const r = await fetch(path, { cache: 'no-store' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+const taskId = t => t.task_id ?? t.id ?? t.task;
+async function loadTasks() {
+  const j = await api('/api/tasks');
+  const list = Array.isArray(j) ? j : (j.tasks || []), keep = pick.value;
+  pick.textContent = '';
+  for (const t of list) {
+    const o = document.createElement('option'); o.value = taskId(t);
+    o.textContent = `${taskId(t)} · ${t.refused ? '拒绝启动 ' + t.refused : t.verdict || t.last_kind || ''}`;
+    pick.appendChild(o);
+  }
+  if (keep && list.some(t => taskId(t) === keep)) pick.value = keep;
+  return { list, missing: j.ledger === 'missing' };
+}
+
+/* switching between the ledger and the scripted demo */
+async function setSource(src, again = false, want = null) {
+  if (src !== 'demo' && !server) { setStatus('没有连上 m2k live 服务，只能看演示剧本：在命令行运行 m2k live，它会打开这个页面。'); src = 'demo'; }
+  source = src; press('[data-src]', $('src-' + src));
+  document.querySelectorAll('.demo-only').forEach(g => g.hidden = src !== 'demo');
+  document.querySelectorAll('.ledger-only').forEach(g => g.hidden = src === 'demo');
+  stopBusy(); L.gen++;
+  if (src === 'demo') { if (server) setStatus('演示剧本：不读账本，事件按剧本模拟。'); return run(); }
+  return startLedger(want || (src === 'live' && followNewest && !again ? null : pick.value || null));
+}
+function resetLedgerView(task) {
+  stopBusy(); reset();
+  Object.assign(L, { task, after: 0, queue: [], played: new Map(), done: false, quiet: 0, finished: false, end: null,
+                     submitted: false, reviewerIn: false, lastLamp: null, obs: true });
+  reviewerCap.textContent = '[models.reviewer] · 新开会话，看不到 Worker 的对话';
+  worker.g.setAttribute('opacity', 0); agentLabel.textContent = ''; dockTx.textContent = '';
+  D.tree = []; D.draw();
+  for (const [id, v] of [['d-agent', '—'], ['d-adapter', '—'], ['d-call', '还没开工'], ['d-round', '—'], ['d-tok', '—'], ['d-review', '—']]) $(id).textContent = v;
+}
+async function startLedger(task) {
+  const gen = ++L.gen;
+  let info;
+  try { info = await loadTasks(); } catch (e) { setStatus('读取任务列表失败：' + e.message); return; }
+  if (gen !== L.gen) return;
+  task = task || (info.list[0] && taskId(info.list[0]));
+  if (!task) {
+    resetLedgerView(null);
+    setStatus(info.missing ? '账本文件还不存在：等第一次 m2k run 开始…' : '账本里还没有任务：等第一次 m2k run 开始…');
+    await sleep(2000); if (gen === L.gen) startLedger(null); return;
+  }
+  pick.value = task; resetLedgerView(task); L.gen = gen;
+  return source === 'replay' ? replay(gen) : follow(gen);
+}
+async function fetchSteps() {
+  const j = await api(`/api/steps?task=${encodeURIComponent(L.task)}&after=${Math.max(0, L.after - 30)}&limit=500`);
+  const steps = j.steps || [];
+  for (const st of steps) {
+    const old = L.played.get(st.seq);
+    if (!old) { L.played.set(st.seq, st); L.queue.push(st); }
+    else if (st.obs && !old.obs) { old.obs = true; L.queue.push({ late: true, seq: st.seq, station: st.station, kind: st.kind }); }
+    L.after = Math.max(L.after, st.seq);
+  }
+  L.done = !!j.done;
+  return { fresh: steps.some(st => st.seq > L.after - 1 && !st.late), more: steps.length >= 500 };
+}
+async function pump(gen) {
+  if (L.pumping) return;
+  L.pumping = true;
+  try {
+    while (gen === L.gen && L.queue.length) {
+      boost = L.queue.length > 12 ? 4 : L.queue.length > 5 ? 2 : 1;
+      await playStep(L.queue.shift());
+    }
+  } catch (e) { if (e !== CANCEL) console.error(e); }
+  finally { L.pumping = false; boost = 1; }
+}
+async function follow(gen) {
+  while (gen === L.gen) {
+    try {
+      const before = L.queue.length + L.played.size;
+      await fetchSteps();
+      const grew = L.queue.length + L.played.size > before;
+      pump(gen);
+      setStatus(`实时跟随 ${L.task} · 已读到 seq ${L.after}${L.done ? ' · 运行已到最后阶段' : ''}`);
+      if (grew || L.pumping || !L.done) L.quiet = 0;
+      else if (!L.finished) {
+        L.quiet = L.quiet || Date.now();
+        if (Date.now() - L.quiet > 4000) { L.finished = true; await finish(gen); }
+      }
+      if (L.finished && followNewest) {
+        const info = await loadTasks(), newest = info.list[0] && taskId(info.list[0]);
+        if (newest && newest !== L.task && gen === L.gen) return startLedger(newest);
+      }
+    } catch (e) { if (e === CANCEL) return; setStatus('读取账本失败：' + e.message + '（继续重试）'); }
+    await sleep(500);
+  }
+}
+async function replay(gen) {
+  try {
+    let r;
+    do { r = await fetchSteps(); } while (r.more && gen === L.gen);
+    setStatus(`回放 ${L.task} · 共 ${L.played.size} 步`);
+    await pump(gen);
+    if (gen === L.gen) await finish(gen);
+  } catch (e) { if (e !== CANCEL) setStatus('回放失败：' + e.message); }
+}
+
+/* one ledger step -> the prototype's motions */
+async function lampTo(i, v) {
+  const g = lampEls[i];
+  if (!g || g.dataset.state === v) return;
+  if (v !== 'skip' && L.lastLamp !== null && i > L.lastLamp) await stripTravel(L.lastLamp, i);
+  g.dataset.state = 'active'; await wait(120); g.dataset.state = v;
+  if (v !== 'skip') L.lastLamp = Math.max(L.lastLamp ?? -1, i);
+}
+function markCellObs(sq) {
+  const c = cells.get(sq);
+  if (!c) return null;
+  el('rect', { x: +c.getAttribute('x') + 3, y: tapeY - 14, width: 5, height: 5, fill: 'var(--seal)' }, tape);
+  return c;
+}
+function ensureWorker(animal) {
+  animal = ANIMALS.has(animal) ? animal : 'robot';
+  if (worker.kind === animal) return;
+  const old = worker; worker = makeActor(animal); place(worker, old.x, old.y);
+  worker.g.setAttribute('opacity', old.g.getAttribute('opacity')); old.g.remove();
+  wkind = animal; D.draw();
+}
+function ensureReviewer(animal) {
+  animal = ANIMALS.has(animal) ? animal : 'robot';
+  if (fox.kind === animal) return;
+  const old = fox; fox = makeActor(animal); place(fox, old.x, old.y);
+  fox.g.setAttribute('opacity', old.g.getAttribute('opacity')); old.g.remove();
+}
+function startBusy(st) {
+  stopBusy();
+  const t0 = tsMs(st.ts), live = source === 'live';
+  const show = () => say(worker, live && isFinite(t0) ? `工作中 ${Math.max(0, Math.round((Date.now() - t0) / 1000))}s · 里面看不见` : '工作中 · 里面看不见');
+  show(); L.busy = { t0, timer: setInterval(show, 1000) };
+}
+function stopBusy(st) {
+  if (!L.busy) return;
+  clearInterval(L.busy.timer);
+  const secs = st ? Math.round((tsMs(st.ts) - L.busy.t0) / 1000) : NaN, who = worker;
+  L.busy = null;
+  say(who, isFinite(secs) ? `用了 ${secs}s` : '');
+  setTimeout(() => { if (who === worker && !L.busy) say(who, ''); }, 1400);
+}
+async function actorDo(st) {
+  const a = st.actor;
+  if (!a) return;
+  if (a.role === 'reviewer') {
+    ensureReviewer(a.animal);
+    if (a.do === 'enter' && !L.reviewerIn) {
+      L.reviewerIn = true; fox.g.setAttribute('opacity', 1);
+      await walk(fox, 1000, 600, 700); await walk(fox, N.review.x + 92, 600, 600);
+    }
+    if (a.do === 'verdict') {
+      const c = st.caption || '', no = /NO_GO/.test(c), go = !no && /\bGO\b/.test(c);
+      say(fox, go ? 'GO ✓' : no ? 'NO_GO ✗' : '看不懂 ?', go ? 'ok' : 'bad'); await wait(900);
+    }
+    return;
+  }
+  ensureWorker(a.animal);
+  if (a.do !== 'enter' && worker.g.getAttribute('opacity') !== '1') { place(worker, ...home()); worker.g.setAttribute('opacity', 1); }
+  switch (a.do) {
+    case 'enter': if (worker.g.getAttribute('opacity') !== '1') await enter(); break;
+    case 'files': case 'cmd': case 'edit': await walk(worker, SUB[a.do].x, 122); break;
+    case 'home': stopBusy(st); await walk(worker, ...home()); break;
+    case 'think': await say2(st.detail && st.detail.model ? `${st.detail.model} 在想下一步…` : '在想下一步…'); break;
+    case 'busy': startBusy(st); break;
+    case 'denied': await oops('被拦下了'); break;
+    case 'done': stopBusy(st); break;
+  }
+}
+function applyDetail(st) {
+  const d = st.detail || {};
+  if (st.kind === 'task.submitted' && st.task === L.task) { D.tree = [{ id: L.task, file: '总任务', st: 'run', parent: true }]; D.draw(); }
+  if (d.model && st.actor && st.actor.role === 'reviewer') reviewerCap.textContent = `[models.reviewer] ${d.model} · 新开会话，看不到 Worker 的对话`;
+  if (d.model && (!st.actor || st.actor.role !== 'reviewer')) { $('d-agent').textContent = d.model; $('d-adapter').textContent = `[models.worker] ${d.model}`; dockTx.textContent = d.model; agentLabel.textContent = d.model; }
+  if (d.call) D.call(d.call);
+  if (d.round !== undefined && d.round !== null) $('d-round').textContent = String(d.round);
+  if ('tokens' in d) $('d-tok').textContent = d.tokens === null ? '未知（这一步没有上报用量）' : `${Number(d.tokens).toLocaleString('en-US')} tokens`;
+  if (d.review) $('d-review').textContent = d.review === 'same-model' ? '同源审查（同一模型，新会话）' : '跨模型审查';
+  if (Array.isArray(d.tree)) {
+    for (const [id, s] of d.tree) {
+      let t = D.tree.find(x => x.id === id);
+      if (!t) { t = { id, file: id === L.task ? '总任务' : '子任务', st: 'wait', parent: id === L.task }; D.tree.push(t); }
+      t.st = TREE[s] || 'run';
+    }
+    D.draw();
+  }
+}
+function noteEnd(st) {
+  if (st.kind === 'task.submitted' && st.task === L.task) { L.submitted = true; L.obs = !(st.lamps && st.lamps['4'] === 'skip'); }
+  if (st.task !== L.task && st.kind !== 'startup.refused') return;
+  if (st.kind === 'startup.refused') L.end = { tone: 'bad', text: '拒绝启动', sub: st.caption || '' };
+  if (st.kind === 'verdict') D.set(L.task, st.state === 'ok' ? 'ok' : 'fail');
+  if (st.kind === 'verdict') L.end = st.state === 'ok' ? { tone: 'ok', text: '判定 PASS', sub: '这个任务没有配置交付目录' }
+    : st.state === 'bad' ? { tone: 'bad', text: '判定 FAIL', sub: st.caption || '' } : { tone: 'unk', text: '判定 UNKNOWN', sub: st.caption || '不确定就不交付' };
+  else if (st.kind === 'delivery.result') L.end = { tone: 'ok', text: '已交付', sub: st.caption || '' };
+  else if (st.kind === 'delivery.refused') L.end = { tone: 'bad', text: '未交付', sub: st.caption || '' };
+}
+async function playStep(st) {
+  if (st.late) {
+    if (st.station && N[st.station]) await stamp(st.station);
+    else if (st.kind === 'release.checked') await stamp(null, false, lampAt(7));
+    const c = markCellObs(st.seq); if (sealed.length) sealed[sealed.length - 1].cell = c;
+    return;
+  }
+  for (const [k, v] of Object.entries(st.lamps || {}).sort((a, b) => a[0] - b[0])) await lampTo(+k - 1, v);
+  if (st.kind === 'release.checked') { const m = /[0-9a-f]{16}/.exec(st.caption || ''); rootLabel.textContent = m ? `Root ${m[0]}` : (st.caption || '').slice(0, 40); rootLabel.setAttribute('class', 'root-ok'); }
+  if (st.kind === 'startup.refused') rootLabel.setAttribute('class', 'root-bad');
+  if (st.kind === 'release.checked' && st.obs) await stamp(null, false, lampAt(7));
+  applyDetail(st); noteEnd(st);
+  const log = { k: st.task && st.task !== L.task ? `${st.kind} · ${st.task}` : st.kind, zh: st.caption || st.kind,
+                state: st.state === 'ok' ? 'ok' : st.state === 'bad' ? 'bad' : '', seq: st.seq, ts: st.ts };
+  const n = st.station && N[st.station] ? st.station : null;
+  if (!n) { addLog(log, !!st.obs); return; }
+  if (n === 'worker' && /^(effect\.intent|gate\.denied|plan\.)/.test(st.kind)) flashPatrol();
+  if (cur && n !== cur) { if (nodeEls[cur].g.dataset.state === 'active') setState(cur, 'ok'); await travel(cur, n); }
+  cur = n; setState(n, st.state === 'bad' ? 'bad' : 'active');
+  if (CRATE.has(st.kind) && st.task === L.task) await moveCrate(n);
+  await actorDo(st);
+  if (st.kind === 'gate.adjudication' && st.task === L.task) {
+    if (!L.obs) { boothNote.textContent = '未配置 OBS'; boothNote2.textContent = '只凭账本重算，没有旁证可对'; }
+    else if (st.state === 'ok') await reconcileAnim([]);
+    else { boothNote.textContent = ''; boothNote2.textContent = (st.caption || '').slice(0, 40); }
+  }
+  if (st.obs) await stamp(n);
+  addLog(log, !!st.obs);
+  if (st.state === 'ok') setState(n, 'ok');
+  await wait(n === 'worker' ? 260 : 450);
+}
+
+/* end of a run: show the outcome, then re-run the read-only adjudicator on a copy of the ledger */
+async function finish(gen) {
+  if (!L.submitted) { showBanner(L.end || { tone: 'unk', text: '还没有提交任务', sub: '' }); return; }
+  await adjudicateNow(gen);
+}
+async function adjudicateNow(gen) {
+  if (L.pumping) { setStatus('还在播放，播完会自动重新裁决。'); return; }
+  let j;
+  try { j = await api(`/api/adjudicate?task=${encodeURIComponent(L.task)}`); }
+  catch (e) { setStatus('重新裁决失败：' + e.message); if (L.end) showBanner(L.end); return; }
+  if (gen !== L.gen) return;
+  try {
+    banner.setAttribute('opacity', 0);
+    if (cur && cur !== 'adjud') { if (nodeEls[cur].g.dataset.state === 'active') setState(cur, 'ok'); await travel(cur, 'adjud'); }
+    cur = 'adjud'; setState('adjud', 'active'); recon.textContent = '';
+    const flagged = (j.flagged_seqs || []).map(sq => { const c = cells.get(sq); return { seq: sq, x: c ? +c.getAttribute('x') + 5 : 30 }; });
+    if (L.obs) await reconcileAnim(flagged);
+    else { boothNote.textContent = '未配置 OBS'; boothNote2.textContent = '只凭账本重算，没有旁证可对'; await wait(500); }
+    const pass = j.verdict === 'PASS', why = (j.reasons || [])[0] || '';
+    if (!pass && !flagged.length) { boothNote.textContent = ''; boothNote2.textContent = why.slice(0, 40); }
+    setState('adjud', pass ? 'ok' : 'bad');
+    addLog({ k: 'm2k live · 重新裁决（不写账本）', zh: pass ? (L.obs ? '在账本副本上重跑只读裁决器：PASS，和 OBS 日志全部对上' : '在账本副本上重跑只读裁决器：PASS（未配置 OBS，只凭账本）') : `在账本副本上重跑只读裁决器：${j.verdict} · ${why}`, state: pass ? 'ok' : 'bad' }, false, false);
+    const end = L.end || { tone: pass ? 'ok' : 'bad', text: '重新裁决 ' + j.verdict, sub: '' };
+    if (!pass && end.tone === 'ok') showBanner({ tone: 'bad', text: '账本对不上 · ' + j.verdict, sub: why.slice(0, 70) });
+    else showBanner({ ...end, sub: `${end.sub ? end.sub.slice(0, 50) + ' · ' : ''}重新裁决：${j.verdict}` });
+    setStatus(`${source === 'live' ? '实时跟随' : '回放'} ${L.task} · 运行结束 · 重新裁决 ${j.verdict}`);
+  } catch (e) { if (e !== CANCEL) throw e; }
+}
+async function showEvent(li, s) {
+  const open = li.querySelector('pre');
+  if (open) { open.remove(); return; }
+  if (source === 'demo' || !L.task) return;
+  const p = document.createElement('pre'); p.textContent = '读取中…'; li.appendChild(p);
+  try {
+    const j = await api(`/api/events?task=${encodeURIComponent(L.task)}&after=${s.seq - 1}&limit=1`);
+    const ev = (Array.isArray(j) ? j : j.events || [])[0];
+    p.textContent = ev ? JSON.stringify(ev, null, 2) : '没有找到这一条';
+  } catch (e) { p.textContent = '读取失败：' + e.message; }
+}
+
+$('src-live').onclick = () => { followNewest = true; setSource('live'); };
+$('src-replay').onclick = () => setSource('replay', true);
+$('src-demo').onclick = () => setSource('demo');
+pick.onchange = () => { followNewest = false; setSource(source === 'demo' ? 'replay' : source, true, pick.value); };
+$('readjudicate').onclick = () => { if (L.task) adjudicateNow(L.gen); };
+(async () => {
+  try { await api('/api/tasks'); server = true; } catch { server = false; }
+  if (!server) { $('src-live').disabled = $('src-replay').disabled = true; return setSource('demo'); }
+  const want = new URLSearchParams(location.search).get('task');
+  if (want) followNewest = false;
+  setSource('live', false, want);   // a named task is followed from its start: replayed if finished, live if still running
+})();
+
+})();
+</script>

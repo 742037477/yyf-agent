@@ -1,0 +1,28 @@
+# T41: DeepSeek Harness as the worker on Windows, GLM-5.3 as the independent reviewer.
+# Copy this file outside the repo before filling it in; add the same [trust] block as for the Codex demo.
+
+[sandbox]
+backend = "none"   # Windows has no bubblewrap; recorded in the ledger
+
+[models.worker]
+kind = "cli"
+name = "deepseek-harness"
+# Run `npm root -g` to find @deepseek-ai/dsh, then read its package.json "bin" for the entry .js path.
+# Use node with that entry directly: npm .cmd/.ps1 launcher shims mangle multi-line prompt arguments.
+command = ["node", "<path to the dsh entry .js>", "--profile", "headless"]
+prompt = "arg"
+env = ["PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "USERPROFILE", "HOMEDRIVE",
+       "HOMEPATH", "HOME", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "CLAUDE_CONFIG_DIR", "DEEPSEEK_API_KEY", "DSH_HOME"]
+timeout_s = 1800
+usage = ""   # dsh reports no usage; tokens remain unknown, never zero
+isolation = "none: DeepSeek Harness runs its shell tool without a sandbox on Windows (declared, not verified by M2)"
+
+[models.reviewer]
+kind = "openai_compat"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+model = "glm-5.3"
+api_key_file = "C:/path/to/your/glm-key.txt"    # key FILE, never commit it
+max_tokens = 32768
+timeout_s = 600
+extra_body = { reasoning_effort = "max" }
+retry_delays = [60, 240]

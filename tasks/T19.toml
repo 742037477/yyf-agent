@@ -1,0 +1,32 @@
+# m2k task contract for card T19 Part C: a tiny real task run under the TEST_ONLY trust chain (workflow m2k-task).
+# DeepSeek works, GLM-5.3 reviews; the credential is issued by the framework under the old test Root's charter.
+[task]
+id = "T19-run-2"            # bump for a rerun (run-1: no secret yet, ran without [trust])
+goal = """You are working inside the m2-kernel repository (a Python governance kernel).
+Create examples/trust_demo/greet.py with one function greet(name) that returns the string "hello, " followed by name,
+for example greet("m2k") returns "hello, m2k". Standard library only, no print at import time, nothing else in the file
+except a one-line module docstring.
+Then run `{python} tasks/T19_check.py` with run_command and fix until it prints T19 CHECK OK; only then call finish."""
+workspace = ".."
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]
+constraints = [
+  "Only create examples/trust_demo/greet.py. Do not modify any other file.",
+  "Never read, print or copy any key file.",
+]
+protected = [
+  "AGENTS.md", "m2k/trust.py", "m2k/kernel.py", "m2k/gates.py", "m2k/worker.py", "m2k/ledger.py", "m2k/verify.py",
+  "m2k/tools.py", "m2k/contract.py", "m2k/models.py", "m2k/cli.py", "m2k/sandbox.py", "m2k/types.py",
+  "trust/test/root-pin.json", "trust/test/charter.json", "trust/test/issuer-pin.json", "trust/test/caps.toml",
+  "tasks/T19-trust-e2e.md",
+]
+
+[acceptance]
+files = ["tasks/T19_check.py"]
+command = "{python} tasks/T19_check.py"
+timeout_s = 600
+
+[budget]                    # within the charter caps in trust/test/caps.toml
+max_rounds = 20
+max_model_calls = 24
+max_tokens = 1000000
+max_commands = 10

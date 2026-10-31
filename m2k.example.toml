@@ -1,0 +1,93 @@
+# Copy to m2k.toml (git-ignored) and fill in. Never put an API key in this file. Either:
+#   api_key_env = "NAME"                         read the key from an environment variable, or
+#   api_key_file = "path" (+ api_key_field)      read it from a file; api_key_field is a dotted path
+#                                                inside a .toml/.json file, omit it for a plain text file.
+
+# Default: %LOCALAPPDATA%/m2k/ledger.sqlite (Windows),
+# $XDG_STATE_HOME/m2k/ledger.sqlite or ~/.local/state/m2k/ledger.sqlite (other systems).
+# The ledger must never be inside a task workspace.
+# Paths are relative to this config folder; keep both outside every task workspace.
+# PRODUCTION requires repo_dir and successful checks/publishing; TEST_ONLY warns and continues.
+[anchor]
+file = "../m2k-state/anchors.jsonl"
+# repo_dir = "../m2k-anchors"
+
+# Optional outside-workspace checks: choose narrow agent config paths, not home/session-log folders.
+# Changes fail the task; this observes writes, it does not prevent them. Re-sign after config changes.
+# [watch]
+# paths = ["~/.codex/config.toml", "~/.claude/settings.json"]
+
+# OBS is required with [trust]; generate with: m2k obs keygen --out ../m2k-obs
+# Same OS user without isolation can read the OBS key; stronger notaries come later.
+# Paths are relative to this config folder; key and log must be outside the task workspace.
+[obs]
+key = "../m2k-obs/obs-key.pem"
+log = "../m2k-obs/obs.jsonl"
+public_key_b64 = "PASTE_KEYGEN_PUBLIC_KEY"
+
+# m2k run refuses without [trust]. Generate a test chain: m2k trust init-dev --out keys
+# All paths are relative to this config folder.
+# Keep issuer_key outside every task workspace.
+# After finishing this config, sign it with the TEST_ONLY Root:
+# m2k trust sign-release --root-key keys/root.pem --domain TEST_ONLY --code dev --slot dev --version 1 --out keys/release.json
+# To go back, re-sign the old config with a higher --version.
+# To change the Root, follow README section "换 Root（合法做法）".
+[trust]
+domain = "TEST_ONLY"                 # or "PRODUCTION"
+root_pin = "keys/root-pin.json"      # Root public key
+charter = "keys/charter.json"        # Root-signed framework charter
+revocations = "keys/revocations.json"  # Root-signed; required in PRODUCTION
+issuer_key = "keys/issuer.pem"       # framework private key, outside task workspaces
+release = "keys/release.json"        # Root-signed code/config manifest; required
+# credential_ttl_s = 3600              # optional
+
+# How every command (worker commands and the acceptance command) runs:
+#   "auto"  (default) bubblewrap if it works here (Linux), otherwise `m2k run` refuses to start
+#   "bwrap" require bubblewrap: only the workspace is writable, no network unless the task sets
+#           [task] network = true, no home folders, no other processes
+#   "none"  no isolation; you accept that a command can read your files and use the network.
+#           Recorded in the ledger. Needed on Windows/macOS for local runs (or run on GitHub: m2k-task).
+[sandbox]
+backend = "auto"
+
+# Windows: check is read-only; install/grant/revoke/uninstall require an elevated terminal and confirmation.
+# Relative paths resolve against this config folder. Optional grants cannot enter data_dir/protected.
+[isolation]
+svc_user = "m2k-svc"
+agent_user = "m2k-agent"
+data_dir = 'D:\m2k\svc-data'
+tools_dir = 'C:\m2k-tools'
+protected = ['D:\m2k\keys', 'D:\m2k\private', 'D:\m2k\demo']
+agent_read = []
+agent_write = []
+owner_user = "alice"                 # optional; default: the user running the command
+code_dir = 'D:\m2k\m2-kernel'       # optional; default: folder containing the m2k package
+code_readers = []                     # optional; extra code-only RX accounts, never svc_user/agent_user
+backup_root = 'C:\m2k-acl-backup'     # optional; keep backups while isolation is installed
+
+# The worker writes the code.
+[models.worker]
+# watch_s = 5   # kind = "cli" only
+kind = "openai_compat"
+base_url = "https://api.openai.com/v1"   # any OpenAI-compatible endpoint (DeepSeek, Qwen, local vLLM, a relay...)
+model = "gpt-4.1"
+api_key_env = "OPENAI_API_KEY"
+max_tokens = 4096
+timeout_s = 180
+# Extra request fields, e.g. maximum reasoning for DeepSeek V4 / GLM-5.x:
+# extra_body = { reasoning_effort = "max" }
+
+# The reviewer judges the result without seeing the worker's conversation.
+# Prefer a different model or provider from the worker.
+# Example reading the key from an existing Codex config instead of an environment variable:
+#   api_key_file = "D:/keys/codex-config.toml"
+#   api_key_field = "model_providers.deepseek.experimental_bearer_token"
+[models.reviewer]
+# allow_same_model = true   # same-model review: a fresh session that never sees the worker's conversation
+# Cross-vendor review is stronger: the same model shares the worker's blind spots.
+kind = "openai_compat"
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-chat"
+api_key_env = "DEEPSEEK_API_KEY"
+max_tokens = 2048
+timeout_s = 180

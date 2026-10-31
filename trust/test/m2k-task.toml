@@ -1,0 +1,34 @@
+ledger = "/root/m2k/ledger.sqlite"
+[anchor]
+file = "anchors.jsonl"
+[sandbox]
+backend = "bwrap"
+[models.worker]
+base_url = "https://api.deepseek.com"
+model = "deepseek-flash"
+api_key_file = "/root/m2k/keys.toml"
+api_key_field = "deepseek"
+max_tokens = 32768
+timeout_s = 600
+extra_body = { reasoning_effort = "max" }   # owner: always maximum reasoning
+retry_delays = [60, 240]                     # T36: resend when the provider is busy (429/5xx)
+[models.reviewer]
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+model = "glm-5.3"
+api_key_file = "/root/m2k/keys.toml"
+api_key_field = "glm"
+max_tokens = 32768
+timeout_s = 600
+extra_body = { reasoning_effort = "max" }   # owner: always maximum reasoning
+retry_delays = [60, 240]
+[trust]
+domain = "TEST_ONLY"
+root_pin = "trust/root-pin.json"
+charter = "trust/charter.json"
+issuer_key = "trust/issuer.pem"
+release = "trust/release.json"
+
+[obs]
+key = "obs/obs-key.pem"
+log = "obs/obs.jsonl"
+public_key_b64 = "DczteF1EH9w8kl7DeK2RMs+1mqWI8JeaKAmJ5nFKzYk="

@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.m2k/
+m2k-demo/
+m2k.toml
+*.egg-info/
+build/
+dist/
+examples/*/ws/
+examples/*/out/
+# secrets and runtime data (T89)
+.env
+.env.*
+*.pem
+*.key
+.credentials.yaml
+auth.json
+keys/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

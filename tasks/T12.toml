@@ -1,0 +1,37 @@
+# m2k task contract for card T12, executed by DeepSeek (worker) and reviewed by GLM-5.3 on GitHub (workflow m2k-task).
+[task]
+id = "T12-run-3"            # bump for a rerun
+goal = """You are working inside the m2-kernel repository (a Python governance kernel).
+Read tasks/T12-anchor-attack-drill.md, m2k/anchor.py, m2k/ledger.py and m2k/accept.py, then do exactly what the card requires:
+create tests/test_anchor_attack.py and add the new offline scenario to m2k/accept.py.
+Look at tests/test_anchor.py and tests/helpers.py for the project's test style. Change no other file.
+The owner's acceptance script tasks/T12_check.py shows exactly how your work will be judged.
+Work in this order: read the files; write tests/test_anchor_attack.py; run `{python} -m unittest tests.test_anchor_attack -v`
+with run_command and fix every error; add the scenario to m2k/accept.py; run `{python} tasks/T12_check.py` and fix
+until it prints T12 CHECK OK; only then call finish. This is a rerun: the card's Review notes list three points in m2k/accept.py that the last attempt got wrong.
+Your workspace starts from main, so write tests/test_anchor_attack.py again (the last version was approved:
+three tests — rewrite+recompute, truncate the anchored tail, untouched control), then fix those three points."""
+workspace = ".."
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]
+constraints = [
+  "Only create tests/test_anchor_attack.py and edit m2k/accept.py. Do not modify any other file.",
+  "Standard library unittest only; temporary folders only; tests must pass on Windows and Linux.",
+  "Rewrite only ledgers your own tests create; never touch any other ledger.",
+  "At most 40 added lines in m2k/accept.py.",
+]
+protected = [
+  "AGENTS.md", "m2k/anchor.py", "m2k/ledger.py", "m2k/kernel.py", "m2k/verify.py", "m2k/gates.py",
+  "m2k/tools.py", "m2k/worker.py", "m2k/contract.py", "m2k/models.py", "m2k/cli.py",
+  "tests/helpers.py", "tests/test_anchor.py", "tasks/T12-anchor-attack-drill.md",
+]
+
+[acceptance]
+files = ["tasks/T12_check.py"]
+command = "{python} tasks/T12_check.py"
+timeout_s = 600
+
+[budget]
+max_rounds = 40
+max_model_calls = 44
+max_tokens = 3000000
+max_commands = 20

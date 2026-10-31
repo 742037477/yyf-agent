@@ -1,0 +1,26 @@
+# T37 demo: Codex (an external agent CLI) is the worker, GLM reviews. Run from the repo root:
+#   m2k --config examples/codex_demo/m2k.codex.toml run examples/codex_demo/task.toml
+# The workspace starts with seed/check.py (the owner's acceptance). Codex must write wordstats.py.
+
+[task]
+id = "codex-demo-1"      # bump for a rerun (codex-demo-2, ...)
+goal = """Create wordstats.py (Python 3.11+, standard library only):
+- top_words(text, n) -> list of (word, count): words are lower-cased runs of letters, digits and apostrophes;
+  the n most common, highest count first, ties sorted alphabetically; n < 1 raises ValueError.
+- Run as `python wordstats.py FILE N`: prints the top N words of the UTF-8 file, one "word count" per line.
+Do not modify check.py."""
+workspace = "ws/{task_id}"
+seed = "seed"
+protected = ["check.py"]
+deliver_to = "out"
+constraints = ["Python standard library only.", "Do not modify check.py."]
+# An external agent can do everything a worker can, so its contract grants every tool (T37).
+tools = ["list_files", "read_file", "write_file", "edit_file", "run_command"]
+
+[acceptance]
+files = ["check.py"]
+command = "{python} check.py"
+timeout_s = 60
+
+[budget]
+max_tokens = 2000000     # checked against the tokens Codex reports (codex exec --json)

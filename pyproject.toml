@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "m2-kernel"
+version = "0.1.0"
+description = "M2 governance kernel: a thin, end-to-end governed agent loop"
+requires-python = ">=3.11"
+dependencies = ["cryptography"]   # Ed25519 only (AGENTS.md: the one allowed dependency)
+
+[project.scripts]
+m2k = "m2k.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["m2k*"]
+
+[tool.setuptools.package-data]
+m2k = ["live.html"]

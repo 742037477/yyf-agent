@@ -1,0 +1,39 @@
+# T37: Codex as the worker on Windows (your ChatGPT login), GLM-5.3 as the independent reviewer.
+# Copy this file to a folder of your own outside the repo before you fill it in (then `git pull` never conflicts):
+#   python -m m2k --config <your copy> run examples/codex_demo/task.toml
+# `codex` must be on PATH where m2k runs. The Microsoft Store Codex app keeps its codex inside the app: either install
+# the CLI (npm install -g @openai/codex) or let the Codex app run this command, approved to run outside its sandbox
+# (inside the sandbox m2k cannot read the reviewer's key file).
+
+# m2k run refuses without [trust]. Create a test chain once:  m2k trust init-dev --out keys
+# and paste the [trust] block it prints here.
+
+# Windows has no bubblewrap. "none": the acceptance command is not isolated (recorded in the ledger).
+# Codex runs in its own sandbox (workspace-write); M2 records that as declared by the vendor, not verified.
+[sandbox]
+backend = "none"
+
+[models.worker]
+kind = "cli"
+name = "codex"
+# Verified with codex-cli 0.162 (2026-10-15). Newer Codex CLIs dropped --full-auto: `codex exec` never asks for
+# approval, and --sandbox cannot be combined with --approve-for-me. If Codex changes its flags again, try the command
+# by hand first in an empty folder:  "Reply with the single word OK." | codex exec <flags> -
+command = ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "--json", "-"]
+# Only these environment variables reach Codex (it needs your profile folder for its login). No M2 key does.
+env = ["PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "USERPROFILE", "HOMEDRIVE",
+       "HOMEPATH", "HOME", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "CODEX_HOME"]
+timeout_s = 1800
+usage = "codex-jsonl"
+isolation = "Codex sandbox workspace-write (declared by the vendor, not verified by M2)"
+
+[models.reviewer]
+kind = "openai_compat"
+base_url = "https://open.bigmodel.cn/api/coding/paas/v4"
+model = "glm-5.3"
+api_key_file = "C:/path/to/your/glm-key.txt"    # your GLM key FILE (not its folder; mind hidden .txt); never commit it
+# api_key_field = "glm"                          # only if that file is .toml/.json
+max_tokens = 32768
+timeout_s = 600
+extra_body = { reasoning_effort = "max" }
+retry_delays = [60, 240]

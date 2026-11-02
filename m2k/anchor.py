@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .ledger import GENESIS
-from . import obs, trust
+from . import locks, obs, trust
 
 
 def head(ledger) -> dict:
@@ -21,6 +21,11 @@ def head(ledger) -> dict:
 
 
 def append(path, ledger, note, receipt=None) -> dict:
+    with locks.mutex(path):   # concurrent m2k runs share one anchor file (T90)
+        return _append(path, ledger, note, receipt)
+
+
+def _append(path, ledger, note, receipt=None) -> dict:
     record = {"v": 1, "ts": datetime.now(timezone.utc).isoformat(), **head(ledger), "note": note}
     if receipt is not None:
         body = receipt["body"]
@@ -106,6 +111,11 @@ def _integrate(repo):
 
 
 def publish(anchors, repo, push=False):
+    with locks.mutex(anchors), locks.mutex(repo, timeout_s=900):   # lock order: anchor file, then clone (T90)
+        return _publish(anchors, repo, push)
+
+
+def _publish(anchors, repo, push=False):
     if git(repo, "symbolic-ref", "--short", "HEAD") != "ledger-anchors":
         raise ValueError("repo-dir must be on branch ledger-anchors")
     if git(repo, "status", "--porcelain"):
@@ -171,6 +181,14 @@ def activity(repo):
 
 
 def remote_check(path, ledger, repo, obs_public_key, obs_log, this_ledger_only=False):
+    try:
+        with locks.mutex(repo, timeout_s=900):
+            return _remote_check(path, ledger, repo, obs_public_key, obs_log, this_ledger_only)
+    except OSError as e:   # lock busy or unusable
+        return [f"remote anchor check: {e}"]
+
+
+def _remote_check(path, ledger, repo, obs_public_key, obs_log, this_ledger_only=False):
     problems = []
     try:
         if obs_public_key is None or obs_log is None:

@@ -7,7 +7,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from . import trust
+from . import locks, trust
 from .ledger import GENESIS
 
 DECISIVE = ("task.submitted", "credential.issued", "candidate.frozen", "test.result", "audit.result", "verdict", "delivery.result")
@@ -17,6 +17,9 @@ class ObsError(ValueError):
     pass
 
 class ObsRefused(ObsError):
+    pass
+
+class ObsUnavailable(ObsError):
     pass
 
 def request(event, ledger_id):
@@ -166,40 +169,72 @@ def reconcile(ledger, task_id, log_path, public_key_b64, *, snapshot=None):
 
 def serve(key_path, log_path, stdin, stdout):
     key, path = trust.load_private_key(key_path), Path(log_path)
-    lines = path.read_bytes().splitlines(keepends=True) if path.exists() else []
-    # The tail's signed obs_prev authenticates every earlier raw line through this chain.
-    seq, prev, last = 0, GENESIS, {}
-    versions, revocations, roots = {}, {}, {}
-    for raw in lines:
-        row = json.loads(raw)
-        if (row["prev"] != prev or type(row["seq"]) is not int or row["seq"] <= seq or not raw.endswith(b"\n")):
-            raise ObsError("broken OBS log chain or non-increasing seq")
-        seq, prev = row["seq"], hashlib.sha256(raw).hexdigest()
-        last[row["request"]["ledger_id"]] = row["request"]["ledger_seq"]
-        _release_versions(row["request"], versions, revocations, roots, remember=True, rebuilding=True)
-    if lines:
-        _shape(row["request"])
-        body = receipt_body(row["receipt"], trust.public_key_b64(key), row["request"])
-        if body.get("obs_seq") != seq or body.get("obs_prev") != row["prev"]:
-            raise ObsError("receipt does not match the OBS log position")
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # One serve per m2k run, many runs per log (T90): every append happens under a cross-process lock,
+    # after folding in the lines other serves appended, so the chain continues from the file's real tail.
+    state = dict(seq=0, prev=GENESIS, size=0, broken=None)
+    last, versions, revocations, roots = {}, {}, {}, {}
+
+    def catch_up():
+        if state["broken"]:
+            raise ObsError(state["broken"])
+        try:
+            with path.open("rb") as log:
+                if log.seek(0, 2) < state["size"]:
+                    raise ObsError("OBS log shrank")
+                log.seek(state["size"])
+                data = log.read()
+        except FileNotFoundError:
+            if state["size"]:
+                raise ObsError("OBS log disappeared") from None
+            data = b""
+        row = None
+        try:
+            for raw in data.splitlines(keepends=True):
+                row = json.loads(raw)
+                if (row["prev"] != state["prev"] or type(row["seq"]) is not int or row["seq"] <= state["seq"]
+                        or not raw.endswith(b"\n")):
+                    raise ObsError("broken OBS log chain or non-increasing seq")
+                state.update(seq=row["seq"], prev=hashlib.sha256(raw).hexdigest(), size=state["size"] + len(raw))
+                last[row["request"]["ledger_id"]] = row["request"]["ledger_seq"]
+                _release_versions(row["request"], versions, revocations, roots, remember=True, rebuilding=True)
+            if row is not None:   # the tail's signed obs_prev authenticates every earlier raw line through this chain
+                _shape(row["request"])
+                body = receipt_body(row["receipt"], trust.public_key_b64(key), row["request"])
+                if body.get("obs_seq") != state["seq"] or body.get("obs_prev") != row["prev"]:
+                    raise ObsError("receipt does not match the OBS log position")
+        except (ValueError, TypeError, KeyError) as e:
+            state["broken"] = f"OBS log at byte {state['size']}: {e}"
+            raise ObsError(state["broken"]) from e
+
+    with locks.mutex(path):   # verify the whole log at startup, as before; a broken log stops the witness
+        catch_up()
     for line in stdin:
         try:
             req = trust.loads_strict(line)
             _shape(req)
-            if req["ledger_seq"] <= last.get(req["ledger_id"], 0):
-                raise ObsError("ledger_seq replay or rollback")
-            _release_versions(req, versions, revocations, roots)
-            ts = datetime.now(timezone.utc).isoformat()
-            response = trust.sign(dict(schema=SCHEMA, notary=trust.fingerprint(key.public_key()), strength="local",
-                                      obs_seq=seq + 1, obs_prev=prev, ts=ts, **req), key)
-            raw = trust.canonical(dict(v=1, seq=seq + 1, ts=ts, prev=prev, request=req, receipt=response)) + b"\n"
-            with path.open("ab") as log:
-                log.write(raw)
-                log.flush()
-                os.fsync(log.fileno())
-            seq, prev, last[req["ledger_id"]] = seq + 1, hashlib.sha256(raw).hexdigest(), req["ledger_seq"]
-            _release_versions(req, versions, revocations, roots, remember=True)
+            with locks.mutex(path):
+                try:
+                    catch_up()
+                except (OSError, ValueError) as e:
+                    raise ObsUnavailable(str(e)) from e
+                if req["ledger_seq"] <= last.get(req["ledger_id"], 0):
+                    raise ObsError("ledger_seq replay or rollback")
+                _release_versions(req, versions, revocations, roots)
+                seq, prev, ts = state["seq"], state["prev"], datetime.now(timezone.utc).isoformat()
+                response = trust.sign(dict(schema=SCHEMA, notary=trust.fingerprint(key.public_key()), strength="local",
+                                          obs_seq=seq + 1, obs_prev=prev, ts=ts, **req), key)
+                raw = trust.canonical(dict(v=1, seq=seq + 1, ts=ts, prev=prev, request=req, receipt=response)) + b"\n"
+                with path.open("ab") as log:
+                    log.write(raw)
+                    log.flush()
+                    os.fsync(log.fileno())
+                state.update(seq=seq + 1, prev=hashlib.sha256(raw).hexdigest(), size=state["size"] + len(raw))
+                last[req["ledger_id"]] = req["ledger_seq"]
+                _release_versions(req, versions, revocations, roots, remember=True)
+        except ObsUnavailable as e:
+            response = {"error": str(e), "unavailable": True}
+        except TimeoutError as e:
+            response = {"error": f"OBS log lock: {e}", "unavailable": True}
         except (OSError, ValueError, TypeError, KeyError) as e:
             response = {"error": str(e)}
         stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
@@ -214,7 +249,7 @@ class ObsClient:
         env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
         try:
             self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                            stderr=subprocess.DEVNULL, env=env, close_fds=True, bufsize=0,
+                                            stderr=subprocess.PIPE, env=env, close_fds=True, bufsize=0,
                                             cwd=Path(__file__).resolve().parent.parent)
         except (OSError, ValueError) as e:
             raise ObsError(str(e)) from e
@@ -226,7 +261,11 @@ class ObsClient:
             self.process.stdin.write(trust.canonical(req) + b"\n")
             self.process.stdin.flush()
             raw = self.reader.submit(self.process.stdout.readline).result(self.timeout_s)
+            if not raw:
+                raise ObsError("no reply")
             envelope = trust.loads_strict(raw.decode("utf-8"))
+            if isinstance(envelope, dict) and "error" in envelope and envelope.get("unavailable") is True:
+                raise ObsError(str(envelope["error"]))
             if req["kind"] == "release.checked" and isinstance(envelope, dict) and "error" in envelope:
                 raise ObsRefused(envelope["error"])
             receipt_body(envelope, self.public_key_b64, req)
@@ -234,8 +273,15 @@ class ObsClient:
         except ObsRefused:
             raise
         except (OSError, ValueError, TypeError, RuntimeError, TimeoutError) as e:
+            reason = str(e) or type(e).__name__
+            try:   # the witness process exited (e.g. a broken log at startup): report why (T90)
+                if self.process.wait(1) is not None:
+                    tail = self.process.stderr.read()[-400:].decode("utf-8", "replace").strip().splitlines()
+                    reason = f"OBS witness process exited ({tail[-1] if tail else reason})"
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                pass
             self.close()
-            raise ObsError(f"witness unavailable: {e or type(e).__name__}") from e
+            raise ObsError(f"witness unavailable: {reason}") from e
 
     def close(self):
         if self.process.poll() is None:
@@ -244,3 +290,4 @@ class ObsClient:
         self.reader.shutdown()
         self.process.stdin.close()
         self.process.stdout.close()
+        self.process.stderr.close()

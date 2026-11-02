@@ -639,18 +639,24 @@ class Kernel:
 
     # ---- steps ---------------------------------------------------------------
     def _record(self, tid, kind, payload, guard=None):
-        try:
-            event = self.ledger.append(tid, kind, payload, guard=guard)
+        def witness(event):
+            try:
+                return self.obs.witness(event, self.ledger.ledger_id), None
+            except ObsError as e:
+                return None, str(e)
+        receipt = failure = None
+        try:   # witness inside the ledger write lock: OBS order = ledger order across concurrent runs (T90)
+            if self.obs is not None and self.obs_failed is None:
+                _, (receipt, failure) = self.ledger.append_then(tid, kind, payload, witness, guard=guard)
+            else:
+                self.ledger.append(tid, kind, payload, guard=guard)
         except LedgerError as e:
             raise KernelError(str(e)) from e
-        receipt = None
-        if self.obs is not None and self.obs_failed is None:
-            try:
-                receipt = self.obs.witness(event, self.ledger.ledger_id)
-                self.ledger.append(tid, "obs.receipt", {"receipt": receipt})
-            except ObsError as e:
-                self.obs_failed = str(e)
-                self.ledger.append(tid, "obs.failed", {"kind": kind, "reason": str(e)})
+        if receipt is not None:
+            self.ledger.append(tid, "obs.receipt", {"receipt": receipt})
+        elif failure is not None:
+            self.obs_failed = failure
+            self.ledger.append(tid, "obs.failed", {"kind": kind, "reason": failure})
         return receipt
 
     @staticmethod

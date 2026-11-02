@@ -78,6 +78,7 @@
 | [T87](T87-positioning-and-demo.md) | 定位与事后核验演示（收尾最后一张卡）：`docs/POSITIONING.md` 写清 m2k 管什么、不管什么并附 T82/T84/T85 结论与 T86 修复；`examples/delivery_check/` 别的电脑一条命令可复现的 check-delivery 演示；check-delivery 每份交付只打一行并加中文合计 | Codex（GLM-5.3 必审 + Codex 独立复审） | DONE (#65) |
 | [T88](T88-setup-guide.md) | 部署文档与一键配置脚本（封版后小破例）：`tools/quickstart.py` 一条命令生成部署目录（测试信任链、配置、签好的清单、示例任务）与改配置后重签；`docs/SETUP.md`（中文，给人）、`docs/AGENT_SETUP.md`（英文，给别人的 Agent 照着部署与接入自家 harness） | Codex（GLM-5.3 必审 + Codex 独立复审） | DONE (#66) |
 | [T89](T89-public-cleanup.md) | 公开前清理：本机路径、Key 文件位置、账号名、私人项目名换成占位符；加 MIT `LICENSE`、补 `.gitignore`、`ci.yml` 显式只读；clone 地址改成 `yyf-agent` | Claude（独立完成） | DONE (#67) |
+| [T90](T90-concurrent-runs.md) | 同一部署多个 run 并发：OBS / 锚点追加加跨进程锁、见证按账本顺序、模型请求按端点排队（`max_concurrent`）；修 20 并发写坏 OBS 的事故，压测到 150 | Claude（GLM 必审 + Codex 复审） | DONE (#68) |
 
 第 1.5 阶段建议顺序：T07 → T06 → T05 → T10 → T11 → T09（Codex 依次做，每张卡新会话）；T08 由 Claude 在 T07 合并后并行做。
 五张卡都改核心逻辑，按分工不交给 DeepSeek；DeepSeek 继续接只写测试、样例的小卡。

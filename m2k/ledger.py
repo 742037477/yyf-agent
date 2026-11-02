@@ -8,10 +8,13 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+from . import locks
 
 GENESIS = "0" * 64
 
@@ -64,7 +67,7 @@ class Ledger:
         self.path = Path(path)
         if str(path) != ":memory:":
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._db = sqlite3.connect(str(path), isolation_level=None)
+        self._db = sqlite3.connect(str(path), isolation_level=None, timeout=120)   # many concurrent runs (T90)
         self._db.executescript(SCHEMA)
         self._ledger_id = None
 
@@ -89,6 +92,14 @@ class Ledger:
                 return self._append(task_id, kind, payload, op_id)
         except sqlite3.IntegrityError as e:
             raise LedgerError(f"duplicate operation {task_id}/{kind}/{op_id}") from e
+
+    def append_then(self, task_id, kind, payload, then, *, guard=None):
+        """Commit the event, then call then(event); both under one lock beside the ledger, so concurrent m2k runs
+        call then (the OBS witness) in ledger order (T90). A crash in between leaves an event without a witness,
+        never a witness of an event that was rolled back."""
+        with nullcontext() if str(self.path) == ":memory:" else locks.mutex(self.path, timeout_s=None):
+            event = self.append(task_id, kind, payload, guard=guard)
+            return event, then(event)
 
     def _append(self, task_id: str, kind: str, payload: dict[str, Any] | None = None,
                 op_id: str | None = None) -> Event:

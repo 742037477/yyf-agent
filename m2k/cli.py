@@ -288,9 +288,16 @@ def _run(args, cleanup) -> int:
                    "version": body["version"], "manifest_id": body["manifest_id"],
                    "revocations_version": revocations["body"]["version"] if revocations is not None else None}
         with _ledger(args, (cfg, base, raw)) as ledger:
-            event = ledger.append("m2k.startup", "release.checked", {"task": contract.task_id, "release": checked})
+            def witness(event):
+                try:
+                    return observer.witness(event, ledger.ledger_id), None
+                except obs.ObsError as e:
+                    return None, e
+            event, (receipt, failure) = ledger.append_then("m2k.startup", "release.checked",
+                                                           {"task": contract.task_id, "release": checked}, witness)
             try:
-                receipt = observer.witness(event, ledger.ledger_id)
+                if failure is not None:
+                    raise failure
             except obs.ObsError as e:
                 code = "OBS_UNAVAILABLE"
                 if isinstance(e, obs.ObsRefused):

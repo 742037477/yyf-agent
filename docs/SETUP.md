@@ -167,6 +167,17 @@ python -m m2k --config "$DEPLOY/m2k.toml" trust status
 
 必须先改指向再签最终配置；清单不覆盖已有文件，每次递增版本。不要在签完后再改配置。
 
+## 同时跑多个任务
+
+同一个部署可以同时启动多个 `m2k run`（每个任务用不同的 id），它们共用账本、OBS 日志和锚点文件。
+写入按跨进程锁串行，OBS 按账本顺序见证；实测 150 个 run 同时启动全部交付、OBS 链完整（T90）。
+API 模型的服务商通常按 Key 限并发（例如 GLM 约 8～10 路），超出部分直接 HTTP 429。在
+`[models.worker]` 和 `[models.reviewer]` 里各加一行 `max_concurrent = 8`（不超过服务商上限），
+同一 `base_url` 的请求就会在本机所有 m2k 进程之间排队，最多同时 8 个在途；改完要 resign。
+外部 CLI Worker（Codex、Claude Code 等）自己调用模型，`max_concurrent` 管不到它们。
+每个 run 另有一个 OBS 子进程；150 个并发约 300 个 Python 进程，按内存量力而行。
+OBS 日志、锚点文件旁会出现 `.lock` 文件，属于正常现象，不要删除正在运行时的锁文件。
+
 ## 接入方式与平台差异
 
 API Worker 用 `kind = "openai_compat"`，端点须支持 `/chat/completions`；审查者始终是 API 模型。

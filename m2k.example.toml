@@ -74,6 +74,7 @@ model = "gpt-4.1"
 api_key_env = "OPENAI_API_KEY"
 max_tokens = 4096
 timeout_s = 180
+# max_concurrent = 8   # queue requests to this base_url across all m2k processes; keep it under the provider's limit
 # Extra request fields, e.g. maximum reasoning for DeepSeek V4 / GLM-5.x:
 # extra_body = { reasoning_effort = "max" }
 

@@ -4,11 +4,13 @@ Adapters have no access to tools, the ledger, or the workspace. Add a provider =
 """
 from __future__ import annotations
 
+import hashlib
 import http.client
 import json
 import os
 import re
 import ssl
+import tempfile
 import time
 import tomllib
 import urllib.error
@@ -16,6 +18,8 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Protocol, Sequence
+
+from . import locks
 
 
 class ModelError(RuntimeError):
@@ -72,8 +76,15 @@ class OpenAICompatModel:
     def __init__(self, base_url: str, model: str, api_key_env: str = "OPENAI_API_KEY",
                  max_tokens: int = 4096, temperature: float | None = None, timeout_s: int = 180,
                  extra_body: dict[str, Any] | None = None, name: str | None = None,
-                 api_key_file: str | None = None, api_key_field: str | None = None, retry_delays=()):
+                 api_key_file: str | None = None, api_key_field: str | None = None, retry_delays=(),
+                 max_concurrent: int | None = None):
         self.retry_delays = tuple(float(d) for d in retry_delays)   # seconds before each busy/connection resend
+        if max_concurrent is not None and (type(max_concurrent) is not int or max_concurrent < 1):
+            raise ValueError("max_concurrent must be a positive integer")
+        # At most max_concurrent requests in flight to this endpoint, all its models together, across every m2k process
+        # of this OS user (T90): providers such as GLM limit concurrency per key, not per model.
+        slots = Path(tempfile.gettempdir(), "m2k-model-slots", hashlib.sha256(base_url.rstrip("/").encode()).hexdigest()[:16])
+        self.slots = [slots / f"slot-{i}" for i in range(max_concurrent)] if max_concurrent else None
         self.base_url = base_url.rstrip("/")
         self.url = self.base_url + "/chat/completions"
         self.model = model
@@ -104,7 +115,14 @@ class OpenAICompatModel:
         lost_attempts = 0
         for delay in (*self.retry_delays, None):
             try:
-                data = self._post(body, key)
+                if self.slots is None:
+                    data = self._post(body, key)
+                else:
+                    try:
+                        with locks.held(self.slots):   # _post turns its own OSErrors into ConnectionLost
+                            data = self._post(body, key)
+                    except OSError as e:
+                        raise ModelError(f"model slot lock: {e}") from e
                 break
             except (ProviderBusy, ConnectionLost) as e:
                 if delay is None:
